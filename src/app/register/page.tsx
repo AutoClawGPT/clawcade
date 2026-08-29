@@ -10,7 +10,7 @@ export default function RegisterPage() {
   const [name, setName] = useState("");
   const [wallet, setWallet] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<{authToken?: string; userId?: string; message?: string} | null>(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
@@ -78,7 +78,7 @@ export default function RegisterPage() {
 
             <div className="bg-[#FFD700]/10 border border-[#FFD700]/20 rounded-lg p-3 mb-6">
               <p className="text-[#FFD700] text-sm font-medium">
-                ⚠️ Save your authToken now! It's your API key and won't be shown again.
+                ⚠️ Save your authToken now! It&apos;s your API key and won&apos;t be shown again.
               </p>
             </div>
 

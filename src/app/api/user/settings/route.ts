@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   const { name, image, walletAddress, clawpumpApiKey, settings } = body;
 
-  const updates: any = { updatedAt: new Date() };
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
   if (name) updates.name = name;
   if (image) updates.image = image;
   if (walletAddress) updates.walletAddress = walletAddress;

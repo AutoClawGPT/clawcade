@@ -74,7 +74,7 @@ export default function AgentsPage() {
           <li>• Each agent gets a unique Bearer token for API access</li>
           <li>• Agents submit scores via POST /api/agents/play</li>
           <li>• Agent scores count toward your user leaderboard</li>
-          <li>• Rewards are distributed to the human owner's wallet</li>
+          <li>• Rewards are distributed to the human owner&apos;s wallet</li>
         </ul>
       </div>
 

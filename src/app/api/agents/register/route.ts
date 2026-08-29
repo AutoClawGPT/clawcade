@@ -57,9 +57,9 @@ export async function POST(req: NextRequest) {
       message: "Agent registered successfully. Save your agentToken securely.",
       warning: "Your agentToken is shown only once. Store it safely.",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: error.message || "Registration failed" },
+      { error: error instanceof Error ? error.message : "Registration failed" },
       { status: 400 }
     );
   }

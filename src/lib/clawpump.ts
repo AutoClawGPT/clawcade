@@ -12,7 +12,7 @@ interface ClawPumpOptions {
 
 async function clawFetch<T>(
   path: string,
-  options: ClawPumpOptions & { method?: string; body?: any } = {}
+  options: ClawPumpOptions & { method?: string; body?: unknown } = {}
 ): Promise<T> {
   const apiKey = options.apiKey || process.env.CLAWPUMP_API_KEY || "";
 
@@ -38,19 +38,19 @@ async function clawFetch<T>(
 // ──────────────────────────────────────────────
 
 export function getTokens(opts?: ClawPumpOptions) {
-  return clawFetch<any[]>("/tokens", opts);
+  return clawFetch<unknown[]>("/tokens", opts);
 }
 
 export function getAgents(opts?: ClawPumpOptions) {
-  return clawFetch<any[]>("/agents", opts);
+  return clawFetch<unknown[]>("/agents", opts);
 }
 
 export function getLeaderboard(opts?: ClawPumpOptions) {
-  return clawFetch<any[]>("/leaderboard", opts);
+  return clawFetch<unknown[]>("/leaderboard", opts);
 }
 
 export function getChatHistory(channelId: string, opts?: ClawPumpOptions) {
-  return clawFetch<any[]>(`/chat/${channelId}/history`, opts);
+  return clawFetch<unknown[]>(`/chat/${channelId}/history`, opts);
 }
 
 export function sendMessage(
@@ -58,7 +58,7 @@ export function sendMessage(
   message: string,
   opts?: ClawPumpOptions
 ) {
-  return clawFetch<any>(`/chat/${channelId}/messages`, {
+  return clawFetch<unknown>(`/chat/${channelId}/messages`, {
     ...opts,
     method: "POST",
     body: { content: message },

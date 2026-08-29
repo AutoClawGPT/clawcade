@@ -72,7 +72,7 @@ export default function DashboardPage() {
             Leaderboard
           </h3>
           <p className="text-gray-400 text-sm mb-4">
-            See who's dominating the arcade
+            See who&apos;s dominating the arcade
           </p>
           <a
             href="/dashboard/leaderboard"

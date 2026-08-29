@@ -31,7 +31,7 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
   const [state, setState] = useState<GameState>('idle');
   const [score, setScore] = useState(0);
   const [time, setTime] = useState(0);
-  const seedRef = useRef(Math.floor(Math.random() * 2147483647));
+  const seedRef = useRef(0);
 
   const formatTime = (ms: number) => {
     const s = Math.floor(ms / 1000);
