@@ -22,6 +22,7 @@ import {
   Rocket,
   Zap,
   ShieldCheck,
+  Target,
 } from "lucide-react";
 
 const navItems = [
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/dashboard/games", icon: Gamepad2, label: "Games" },
   { href: "/dashboard/leaderboard", icon: Trophy, label: "Leaderboard" },
   { href: "/dashboard/rewards", icon: Gift, label: "Rewards" },
+  { href: "/dashboard/bounties", icon: Target, label: "Bounties" },
   { href: "/dashboard/agents", icon: Bot, label: "Agents" },
   { href: "/dashboard/chat", icon: MessageSquare, label: "Chat" },
   { href: "/dashboard/launch", icon: Rocket, label: "Launch" },

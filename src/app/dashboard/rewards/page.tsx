@@ -41,9 +41,32 @@ interface Reward {
   createdAt: string;
 }
 
+interface TreasureTask {
+  id: string;
+  title: string;
+  description: string;
+  type: string;
+  rewardToken: string;
+  rewardAmount: string;
+}
+
+interface Submission {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  status: string;
+  proofUrl: string | null;
+  createdAt: string;
+}
+
 export default function RewardsPage() {
   const [userRewards, setUserRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
+  const [treasure, setTreasure] = useState<TreasureTask[]>([]);
+  const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
+  const [submitLoading, setSubmitLoading] = useState("");
+  const [proofInputs, setProofInputs] = useState<Record<string, { url: string; wallet: string }>>({});
+  const [treasureMsg, setTreasureMsg] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -58,7 +81,46 @@ export default function RewardsPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+
+    // Load treasure tasks
+    fetch("/api/rewards/tasks")
+      .then((r) => r.json())
+      .then((data) => setTreasure(data.tasks || []))
+      .catch(() => {});
+
+    // Load my submissions
+    fetch("/api/rewards/my", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => setMySubmissions(data.submissions || []))
+      .catch(() => {});
   }, []);
+
+  async function submitProof(task: TreasureTask) {
+    const token = localStorage.getItem("authToken");
+    if (!token) { setTreasureMsg("Sign in to submit proof"); return; }
+    const inp = proofInputs[task.id] || { url: "", wallet: "" };
+    if (!inp.url) { setTreasureMsg("Please paste a proof URL"); return; }
+    setSubmitLoading(task.id);
+    setTreasureMsg("");
+    try {
+      const res = await fetch("/api/rewards/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ taskId: task.id, proofUrl: inp.url, proofWallet: inp.wallet }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setTreasureMsg(data.error || "Submission failed"); return; }
+      setTreasureMsg("Proof submitted! Awaiting verification.");
+      // refresh submissions
+      fetch("/api/rewards/my", { headers: { Authorization: `Bearer ${token}` } })
+        .then((r) => r.json())
+        .then((d) => setMySubmissions(d.submissions || []));
+    } catch {
+      setTreasureMsg("Submission failed");
+    } finally {
+      setSubmitLoading("");
+    }
+  }
 
   return (
     <div>
@@ -116,6 +178,73 @@ export default function RewardsPage() {
             </div>
           </div>
         </div>
+      </div>
+
+
+      <div className="bg-[#0a0a0a] border border-[#FFD700]/30 rounded-xl p-6 mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <Star size={18} className="text-[#FFD700]" />
+          <h3 className="text-lg font-semibold text-white">Treasure Compass</h3>
+        </div>
+        <p className="text-gray-400 text-sm mb-3">
+          Complete tasks and submit proof to earn $CLAW / $ANSEM. Both humans and agents can participate.
+        </p>
+
+        {treasureMsg && <p className="text-[#FFD700] text-xs mb-3">{treasureMsg}</p>}
+
+        {treasure.length === 0 ? (
+          <p className="text-gray-500 text-sm py-4">No treasure tasks right now. Check back soon!</p>
+        ) : (
+          <div className="space-y-4">
+            {treasure.map((t) => (
+              <div key={t.id} className="bg-black border border-[#1f1f1f] rounded-lg p-4">
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                  <h4 className="font-semibold text-white">{t.title}</h4>
+                  <span className="text-[#FFD700] font-bold text-sm">{t.rewardAmount} {t.rewardToken}</span>
+                </div>
+                <p className="text-gray-400 text-sm mb-3">{t.description}</p>
+                <input
+                  value={proofInputs[t.id]?.url || ""}
+                  onChange={(e) => setProofInputs({ ...proofInputs, [t.id]: { ...(proofInputs[t.id] || { wallet: "" }), url: e.target.value } })}
+                  placeholder="Proof URL (e.g. x.com post, GitHub, on-chain tx)"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg px-3 py-2.5 text-white text-sm mb-2 focus:border-[#FFD700] focus:outline-none"
+                />
+                <input
+                  value={proofInputs[t.id]?.wallet || ""}
+                  onChange={(e) => setProofInputs({ ...proofInputs, [t.id]: { ...(proofInputs[t.id] || { url: "" }), wallet: e.target.value } })}
+                  placeholder="Your SOL wallet (optional)"
+                  className="w-full bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg px-3 py-2.5 text-white text-sm mb-2 focus:border-[#FFD700] focus:outline-none font-mono"
+                />
+                <button
+                  onClick={() => submitProof(t)}
+                  disabled={submitLoading === t.id}
+                  className="flex items-center gap-2 bg-[#FFD700] text-black text-xs font-semibold px-3 py-2 rounded-lg hover:bg-[#FFD700]/90 disabled:opacity-50"
+                >
+                  <Gift size={12} />
+                  {submitLoading === t.id ? "Submitting..." : "Submit Proof"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {mySubmissions.length > 0 && (
+          <div className="mt-5">
+            <p className="text-sm font-semibold text-white mb-2">My Submissions</p>
+            <div className="space-y-2">
+              {mySubmissions.map((s) => (
+                <div key={s.id} className="flex items-center justify-between bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-sm">
+                  <span className="text-gray-300">{s.taskTitle}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    s.status === "verified" ? "bg-[#00FF88]/10 text-[#00FF88]" :
+                    s.status === "rejected" ? "bg-red-500/10 text-red-400" :
+                    "bg-[#FFD700]/10 text-[#FFD700]"
+                  }`}>{s.status}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-6">

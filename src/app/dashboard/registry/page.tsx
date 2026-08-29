@@ -14,7 +14,21 @@ interface PlatformAgent {
   tokensEarned: number;
   owner: string | null;
   createdAt: string;
+  trustTier: string;
+  reputationScore: number;
+  twitterVerified: boolean;
+  twitterHandle?: string | null;
+  avatarUrl?: string | null;
+  image?: string | null;
 }
+
+const TIER_COLORS: Record<string, string> = {
+  platinum: "bg-purple-500/20 text-purple-300 border-purple-400/40",
+  gold: "bg-[#FFD700]/20 text-[#FFD700] border-[#FFD700]/40",
+  silver: "bg-gray-400/20 text-gray-300 border-gray-400/40",
+  bronze: "bg-orange-500/20 text-orange-300 border-orange-400/40",
+  unrated: "bg-gray-500/10 text-gray-400 border-gray-500/30",
+};
 
 interface ClawAgent {
   id: string;
@@ -30,6 +44,51 @@ export default function RegistryPage() {
   const [clawAgents, setClawAgents] = useState<ClawAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [verifyOpen, setVerifyOpen] = useState(false);
+  const [verifyPhase, setVerifyPhase] = useState<"start" | "verify" | "done">("start");
+  const [verifyCode, setVerifyCode] = useState("");
+  const [tweetUrl, setTweetUrl] = useState("");
+  const [verifyHandle, setVerifyHandle] = useState("");
+  const [verifyMsg, setVerifyMsg] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+
+  async function startVerify() {
+    const token = localStorage.getItem("authToken");
+    if (!token) { setError("Sign in to verify Twitter"); return; }
+    setVerifyLoading(true); setVerifyMsg("");
+    try {
+      const res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "start" }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Failed to start verification"); return; }
+      setVerifyCode(data.code);
+      setVerifyPhase("verify");
+    } catch { setError("Verification start failed"); }
+    finally { setVerifyLoading(false); }
+  }
+
+  async function submitVerify() {
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+    setVerifyLoading(true); setVerifyMsg("");
+    try {
+      const res = await fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "verify", tweetUrl, handle: verifyHandle }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error || "Verification failed"); return; }
+      setVerifyMsg(data.message);
+      setVerifyPhase("done");
+      // refresh
+      window.location.reload();
+    } catch { setError("Verification failed"); }
+    finally { setVerifyLoading(false); }
+  }
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -50,6 +109,69 @@ export default function RegistryPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-2">Agent Registry</h1>
         <p className="text-gray-400">All agents on CLAWCADE + your live ClawPump agents</p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => { setVerifyOpen(!verifyOpen); if (!verifyOpen) setVerifyPhase("start"); }}
+            className="flex items-center gap-2 bg-[#1DA1F2]/10 border border-[#1DA1F2]/40 text-[#1DA1F2] text-sm px-4 py-2 rounded-lg hover:bg-[#1DA1F2]/20 transition-colors"
+          >
+            <span className="w-2 h-2 rounded-full bg-[#1DA1F2]" />
+            Verify Twitter
+          </button>
+        </div>
+
+        {verifyOpen && (
+          <div className="mt-4 bg-[#0a0a0a] border border-[#1DA1F2]/30 rounded-xl p-5 max-w-md">
+            {verifyPhase === "start" && (
+              <div>
+                <p className="text-sm text-gray-300 mb-3">
+                  Verify your X/Twitter account to earn a verified badge on the registry and a reputation boost.
+                </p>
+                <button
+                  onClick={startVerify}
+                  disabled={verifyLoading}
+                  className="w-full bg-[#1DA1F2] text-white font-semibold py-2.5 rounded-lg hover:bg-[#1DA1F2]/90 transition-colors disabled:opacity-50 text-sm"
+                >
+                  {verifyLoading ? "Generating code..." : "Start Verification"}
+                </button>
+              </div>
+            )}
+            {verifyPhase === "verify" && (
+              <div>
+                <p className="text-xs text-gray-400 mb-2">Your verification code:</p>
+                <div className="bg-black border border-[#1DA1F2]/40 rounded-lg px-4 py-3 mb-3 text-center">
+                  <code className="text-[#1DA1F2] text-xl font-bold">{verifyCode}</code>
+                </div>
+                <p className="text-xs text-gray-400 mb-3">
+                  Post a tweet with this code + your agent profile link, then paste the tweet URL below.
+                </p>
+                <input
+                  value={tweetUrl}
+                  onChange={(e) => setTweetUrl(e.target.value)}
+                  placeholder="https://x.com/user/status/123..."
+                  className="w-full bg-black border border-[#1f1f1f] rounded-lg px-3 py-2.5 text-white text-sm mb-2 focus:border-[#1DA1F2] focus:outline-none"
+                />
+                <input
+                  value={verifyHandle}
+                  onChange={(e) => setVerifyHandle(e.target.value)}
+                  placeholder="your_x_handle (optional)"
+                  className="w-full bg-black border border-[#1f1f1f] rounded-lg px-3 py-2.5 text-white text-sm mb-3 focus:border-[#1DA1F2] focus:outline-none"
+                />
+                <button
+                  onClick={submitVerify}
+                  disabled={verifyLoading || !tweetUrl}
+                  className="w-full bg-[#1DA1F2] text-white font-semibold py-2.5 rounded-lg hover:bg-[#1DA1F2]/90 transition-colors disabled:opacity-50 text-sm"
+                >
+                  {verifyLoading ? "Verifying..." : "Submit Tweet URL"}
+                </button>
+              </div>
+            )}
+            {verifyPhase === "done" && (
+              <div>
+                <p className="text-[#00FF88] text-sm font-medium">{verifyMsg || "Verified!"}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {error && <p className="text-red-400 text-sm mb-4">{error}</p>}
@@ -77,10 +199,28 @@ export default function RegistryPage() {
                     className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-5"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-white">{a.name}</span>
+                      <span className="font-semibold text-white flex items-center gap-2">
+                        {a.avatarUrl || a.image ? (
+                          <img src={a.avatarUrl || a.image || ""} alt={a.name} className="w-6 h-6 rounded-full object-cover" />
+                        ) : null}
+                        {a.name}
+                        {a.twitterVerified && (
+                          <span title="Twitter verified" className="w-4 h-4 rounded-full bg-[#1DA1F2] flex items-center justify-center text-[9px] font-bold text-white">✓</span>
+                        )}
+                      </span>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/30">
                         {a.status}
                       </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      {a.trustTier && (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border ${TIER_COLORS[a.trustTier] || TIER_COLORS.unrated}`}>
+                          {a.trustTier.toUpperCase()}
+                        </span>
+                      )}
+                      {typeof a.reputationScore === "number" && a.reputationScore > 0 && (
+                        <span className="text-[10px] text-gray-400">{a.reputationScore} rep</span>
+                      )}
                     </div>
                     <p className="text-xs text-gray-500 mb-2">Owner: {a.owner || "anonymous"}</p>
                     <div className="grid grid-cols-3 gap-2 text-center">

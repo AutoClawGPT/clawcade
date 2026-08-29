@@ -294,7 +294,9 @@ export async function launchTokenGasless(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`ClawPump launchTokenGasless: ${res.status} ${text}`);
+    const err = new Error(`ClawPump launchTokenGasless: ${res.status} ${text}`) as Error & { body?: unknown };
+    try { err.body = JSON.parse(text); } catch { /* not JSON */ }
+    throw err;
   }
   return res.json();
 }
@@ -322,7 +324,9 @@ export async function launchTokenSelfFunded(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`ClawPump launchTokenSelfFunded: ${res.status} ${text}`);
+    const err = new Error(`ClawPump launchTokenSelfFunded: ${res.status} ${text}`) as Error & { body?: unknown };
+    try { err.body = JSON.parse(text); } catch { /* not JSON */ }
+    throw err;
   }
   return res.json();
 }
@@ -364,7 +368,9 @@ export async function launchPonsToken(
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`ClawPump launchPonsToken: ${res.status} ${text}`);
+    const err = new Error(`ClawPump launchPonsToken: ${res.status} ${text}`) as Error & { body?: unknown };
+    try { err.body = JSON.parse(text); } catch { /* not JSON */ }
+    throw err;
   }
   return res.json();
 }

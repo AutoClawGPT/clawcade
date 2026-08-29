@@ -37,6 +37,11 @@ export const users = pgTable(
     bestStreak: integer("best_streak").notNull().default(0),
     tokensEarned: real("tokens_earned").notNull().default(0),
     encryptedKeys: jsonb("encrypted_keys"), // { clawpumpApiKey, ... }
+    payoutWallet: varchar("payout_wallet", { length: 64 }),
+    twitterHandle: varchar("twitter_handle", { length: 64 }),
+    twitterVerified: boolean("twitter_verified").notNull().default(false),
+    twitterVerifyCode: varchar("twitter_verify_code", { length: 64 }),
+    twitterVerifyExpiry: timestamp("twitter_verify_expiry", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -68,6 +73,16 @@ export const agents = pgTable(
     totalScore: integer("total_score").notNull().default(0),
     tokensEarned: real("tokens_earned").notNull().default(0),
     skills: jsonb("skills"), // string[]
+    clawpumpAgentId: varchar("clawpump_agent_id", { length: 64 }),
+    clawpumpWalletAddress: varchar("clawpump_wallet_address", { length: 64 }),
+    persona: text("persona"),
+    modelName: varchar("model_name", { length: 64 }),
+    isPublic: boolean("is_public").notNull().default(true),
+    avatarUrl: text("avatar_url"),
+    twitterVerified: boolean("twitter_verified").notNull().default(false),
+    twitterHandle: varchar("twitter_handle", { length: 64 }),
+    trustTier: varchar("trust_tier", { length: 20 }).notNull().default("unrated"),
+    reputationScore: integer("reputation_score").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -264,6 +279,117 @@ export const accounts = pgTable(
     providerAccountId: varchar("provider_account_id", { length: 255 }).notNull(),
   },
   (t) => [uniqueIndex("accounts_provider_account_idx").on(t.provider, t.providerAccountId)]
+);
+
+
+// ──────────────────────────────────────────────
+// BOUNTIES (post tasks, claim, complete — portfolio rewards)
+// ──────────────────────────────────────────────
+export const bounties = pgTable(
+  "bounties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creatorUserId: uuid("creator_user_id").references(() => users.id),
+    creatorName: varchar("creator_name", { length: 255 }),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description").notNull(),
+    rewardToken: varchar("reward_token", { length: 16 }).notNull().default("CLAW"),
+    rewardAmount: varchar("reward_amount", { length: 64 }).notNull(),
+    deliverable: text("deliverable"),
+    status: varchar("status", { length: 20 }).notNull().default("open"), // open | in_progress | completed | disputed
+    escrowWallet: text("escrow_wallet"),
+    assigneeUserId: uuid("assignee_user_id").references(() => users.id),
+    proofUrl: text("proof_url"),
+    deadline: timestamp("deadline", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("bounties_status_idx").on(t.status), index("bounties_creator_idx").on(t.creatorUserId)]
+);
+
+// ──────────────────────────────────────────────
+// AGENT REPUTATION (registry trust tiers)
+// ──────────────────────────────────────────────
+export const agentReputation = pgTable(
+  "agent_reputation",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id").references(() => agents.id),
+    userId: uuid("user_id").references(() => users.id),
+    trustTier: varchar("trust_tier", { length: 20 }).notNull().default("unrated"), // unrated | bronze | silver | gold | platinum
+    reputationScore: integer("reputation_score").notNull().default(0),
+    totalTrades: integer("total_trades").notNull().default(0),
+    totalLaunches: integer("total_launches").notNull().default(0),
+    totalBounties: integer("total_bounties").notNull().default(0),
+    completedBounties: integer("completed_bounties").notNull().default(0),
+    twitterVerified: boolean("twitter_verified").notNull().default(false),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("rep_agent_idx").on(t.agentId), index("rep_user_idx").on(t.userId)]
+);
+
+// ──────────────────────────────────────────────
+// REWARD TASKS (treasure task system — bounty-style tasks)
+// ──────────────────────────────────────────────
+export const rewardTasks = pgTable(
+  "reward_tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: varchar("slug", { length: 128 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    description: text("description").notNull(),
+    type: varchar("type", { length: 32 }).notNull(), // twitter_follow | twitter_post | buy_coin | holding | teach | custom
+    rewardToken: varchar("reward_token", { length: 16 }).notNull().default("CLAW"),
+    rewardAmount: varchar("reward_amount", { length: 64 }).notNull(),
+    proofJson: jsonb("proof_json"),
+    active: boolean("active").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("reward_tasks_slug_idx").on(t.slug), index("reward_tasks_active_idx").on(t.active)]
+);
+
+// ──────────────────────────────────────────────
+// REWARD SUBMISSIONS (proof for tasks)
+// ──────────────────────────────────────────────
+export const rewardSubmissions = pgTable(
+  "reward_submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id),
+    agentId: uuid("agent_id").references(() => agents.id),
+    taskId: uuid("task_id").references(() => rewardTasks.id),
+    proofUrl: text("proof_url"),
+    proofWallet: text("proof_wallet"),
+    proofUsername: text("proof_username"),
+    proofHash: varchar("proof_hash", { length: 128 }).notNull(),
+    status: varchar("status", { length: 20 }).notNull().default("pending"), // pending | verified | rejected
+    adminNote: text("admin_note"),
+    verifiedAt: timestamp("verified_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("sub_task_idx").on(t.taskId), index("sub_user_idx").on(t.userId), uniqueIndex("sub_proof_hash_idx").on(t.proofHash)]
+);
+
+// ──────────────────────────────────────────────
+// REWARD PAYMENTS (payout from treasury)
+// ──────────────────────────────────────────────
+export const rewardPayments = pgTable(
+  "reward_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    submissionId: uuid("submission_id").references(() => rewardSubmissions.id).notNull(),
+    userId: uuid("user_id").references(() => users.id),
+    taskId: uuid("task_id").references(() => rewardTasks.id),
+    token: varchar("token", { length: 16 }).notNull().default("CLAW"),
+    amount: varchar("amount", { length: 64 }).notNull(),
+    txSignature: text("tx_signature"),
+    status: varchar("status", { length: 20 }).notNull().default("paid"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("reward_pay_submission_idx").on(t.submissionId)]
 );
 
 // ──────────────────────────────────────────────

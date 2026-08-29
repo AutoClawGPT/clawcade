@@ -22,6 +22,11 @@ export default function LaunchPage() {
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
   const [payoutWallet, setPayoutWallet] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [twitter, setTwitter] = useState("");
+  const [website, setWebsite] = useState("");
+  const [devBuy, setDevBuy] = useState("");
+  const [funding, setFunding] = useState<Record<string, unknown> | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -48,20 +53,39 @@ export default function LaunchPage() {
     loadAgents();
   }, [loadAgents]);
 
-  async function launch(mode: "pons" | "gasless") {
+  async function launch(mode: "gasless" | "pons" | "selffunded") {
     const token = localStorage.getItem("authToken");
     if (!token || !agentId) return;
     setLoading(true);
     setError("");
     setResult(null);
+    setFunding(null);
 
     try {
       const body =
         mode === "pons"
           ? { mode: "pons", agentId, name, symbol, description, payoutWallet }
           : mode === "selffunded"
-          ? { mode: "selffunded", agentId, name, symbol, description }
-          : { mode: "gasless", agentId, symbol, description, name };
+          ? {
+              mode: "selffunded",
+              agentId,
+              name,
+              symbol,
+              description,
+              imageUrl,
+              devBuy,
+            }
+          : {
+              mode: "gasless",
+              agentId,
+              symbol,
+              description,
+              name,
+              imageUrl,
+              twitter,
+              website,
+              devBuy,
+            };
 
       const res = await fetch("/api/clawpump/launch", {
         method: "POST",
@@ -74,6 +98,9 @@ export default function LaunchPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Launch failed");
+        if (res.status === 402 && data.selfFunded) {
+          setFunding(data);
+        }
         return;
       }
       setResult(data.result || data);
@@ -165,6 +192,45 @@ export default function LaunchPage() {
               />
             </div>
             <div>
+              <label className="block text-sm text-gray-400 mb-2">Token Image URL (optional)</label>
+              <input
+                value={imageUrl}
+                onChange={(e) => setImageUrl(e.target.value)}
+                placeholder="https://.../token.png (proxied through ClawCade)"
+                className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white focus:border-[#00FF88] focus:outline-none font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">X / Twitter (optional)</label>
+              <input
+                value={twitter}
+                onChange={(e) => setTwitter(e.target.value)}
+                placeholder="https://x.com/YourHandle"
+                className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white focus:border-[#00FF88] focus:outline-none font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Website (optional)</label>
+              <input
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="https://yoursite.com"
+                className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white focus:border-[#00FF88] focus:outline-none font-mono text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Initial Dev Buy (SOL, optional)</label>
+              <input
+                value={devBuy}
+                onChange={(e) => setDevBuy(e.target.value)}
+                placeholder="0.5"
+                type="number"
+                step="0.01"
+                min="0"
+                className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white focus:border-[#00FF88] focus:outline-none text-sm"
+              />
+            </div>
+            <div>
               <label className="block text-sm text-gray-400 mb-2">Payout Wallet (PONS)</label>
               <div className="flex items-center gap-2">
                 <Wallet size={16} className="text-gray-500" />
@@ -179,6 +245,33 @@ export default function LaunchPage() {
           </div>
 
           {error && <p className="text-red-400 text-sm mt-4 border border-red-500/30 bg-red-500/10 rounded-lg px-3 py-2">{error}</p>}
+
+          {funding && (
+            <div className="mt-4 bg-[#FFD700]/10 border border-[#FFD700]/30 rounded-lg p-4">
+              <p className="text-[#FFD700] font-semibold text-sm mb-2">
+                Gasless quota used — fund your agent wallet instead
+              </p>
+              <p className="text-gray-300 text-xs mb-3">
+                This key has used its 3 sponsored gasless launches. Fund your agent wallet
+                with ~{String((funding.selfFunded as Record<string, unknown>)?.requiredSol ?? "0.035")} SOL
+                and launch with <strong>Self-Funded</strong>. ClawPump still mints on your behalf.
+              </p>
+              <div className="bg-black border border-[#1f1f1f] rounded-lg p-3 mb-3">
+                <p className="text-[11px] text-gray-400 mb-1">Agent wallet to fund:</p>
+                <code className="text-[#FFD700] text-xs font-mono break-all">
+                  {String((funding.selfFunded as Record<string, unknown>)?.fundWallet ?? "")}
+                </code>
+              </div>
+              <button
+                onClick={() => launch("selffunded")}
+                disabled={loading || !name || !symbol || (description || "").trim().length < 20}
+                className="w-full flex items-center justify-center gap-2 bg-[#FFD700] text-black font-semibold py-2.5 rounded-lg hover:bg-[#FFD700]/90 transition-colors disabled:opacity-50 text-sm"
+              >
+                <Wallet size={16} />
+                {loading ? "Launching..." : "Switch to Self-Funded Launch"}
+              </button>
+            </div>
+          )}
 
           {result && (
             <pre className="mt-4 bg-black border border-[#00FF88]/30 rounded-lg p-3 text-xs text-[#00FF88] overflow-auto max-h-40">

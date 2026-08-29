@@ -27,6 +27,10 @@ export interface AgentRegistration {
   publicKey?: string;
   secretKey?: string;
   skills?: string[];
+  clawpumpAgentId?: string;
+  clawpumpWalletAddress?: string;
+  persona?: string;
+  avatarUrl?: string;
 }
 
 export async function registerAgent(
@@ -83,6 +87,10 @@ export async function registerAgent(
     totalScore: 0,
     tokensEarned: 0,
     skills: data.skills || [],
+    clawpumpAgentId: data.clawpumpAgentId || null,
+    clawpumpWalletAddress: data.clawpumpWalletAddress || null,
+    persona: data.persona || null,
+    avatarUrl: data.avatarUrl || null,
     createdAt: new Date(),
     updatedAt: new Date(),
   }).returning();
