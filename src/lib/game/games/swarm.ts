@@ -9,7 +9,7 @@ export function createSwarm(engine: GameEngine) {
 
   const player = { x: W / 2, y: H / 2, r: 15, speed: 3, attackCd: 0, attackRange: 80 };
   interface Enemy { x: number; y: number; r: number; speed: number; hp: number; color: string; flash: number }
-  let enemies: Enemy[] = [];
+  const enemies: Enemy[] = [];
   let kills = 0;
   let spawnTimer = 0;
   let difficulty = 1;
@@ -167,7 +167,7 @@ export function createSwarm(engine: GameEngine) {
     }
   });
 
-  let projectiles: { x: number; y: number; vx: number; vy: number; life: number; dmg: number }[] = [];
+  const projectiles: { x: number; y: number; vx: number; vy: number; life: number; dmg: number }[] = [];
 
   engine.onRender(() => {
     const ctx = engine.ctx;

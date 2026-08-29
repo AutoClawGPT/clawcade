@@ -33,9 +33,9 @@ export function createCascade(engine: GameEngine) {
   let grid: (Cell | null)[][] = [];
   let selected: { r: number; c: number } | null = null;
   let combo = 0;
-  let score = 0;
+  const score = 0;
   let fallSpeed = 3;
-  let swapAnim: { from: { r: number; c: number }; to: { r: number; c: number }; t: number } | null = null;
+  const swapAnim: { from: { r: number; c: number }; to: { r: number; c: number }; t: number } | null = null;
   let processing = false;
 
   function randomSymbol(): Symbol {

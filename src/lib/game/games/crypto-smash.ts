@@ -29,8 +29,8 @@ export function createCryptoSmash(engine: GameEngine) {
     color: '#f59e0b', type: 'player', attackCd: 0, flash: 0,
   };
 
-  let enemies: Entity[] = [];
-  let projectiles: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
+  const enemies: Entity[] = [];
+  const projectiles: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
   let combo = 0;
   let comboTimer = 0;
   let waveNum = 0;

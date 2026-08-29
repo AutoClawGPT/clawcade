@@ -28,13 +28,13 @@ export function createRocketRide(engine: GameEngine) {
     collected: boolean;
   }
 
-  let obstacles: Obstacle[] = [];
-  let collectibles: Collectible[] = [];
+  const obstacles: Obstacle[] = [];
+  const collectibles: Collectible[] = [];
   let distance = 0;
   let scrollSpeed = 2;
   let spawnTimer = 0;
   let collectibleTimer = 0;
-  let stars: { x: number; y: number; size: number; speed: number }[] = [];
+  const stars: { x: number; y: number; size: number; speed: number }[] = [];
   let trail: { x: number; y: number; life: number }[] = [];
 
   // Init stars
