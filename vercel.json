@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npx drizzle-kit push && next build",
+  "installCommand": "npm install --legacy-peer-deps",
+  "env": {
+    "NEXTAUTH_SECRET": "@nextauth-secret",
+    "DATABASE_URL": "@database-url",
+    "ENCRYPTION_KEY": "@encryption-key",
+    "CRON_SECRET": "@cron-secret"
+  }
+}
