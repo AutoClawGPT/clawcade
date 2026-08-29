@@ -2,13 +2,32 @@
 
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useState, useEffect } from 'react';
 import { GAMES, getGameBySlug } from '@/lib/game';
 import GameCanvas from '@/components/game/GameCanvas';
+
+interface LeaderboardEntry {
+  rank: number;
+  username: string;
+  score: number;
+}
 
 export default function GamePage() {
   const params = useParams();
   const slug = params.slug as string;
   const game = getGameBySlug(slug);
+  const [leaderboard, setLeaderboard] = useState([]);
+
+  useEffect(() => {
+    fetch(`/api/games/scores/leaderboard?period=hourly&limit=5&gameSlug=${slug}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.leaderboard)) {
+          setLeaderboard(data.leaderboard);
+        }
+      })
+      .catch(() => {});
+  }, [slug]);
 
   if (!game) {
     return (
@@ -91,13 +110,13 @@ export default function GamePage() {
                       <span className={`font-bold ${i === 1 ? 'text-yellow-400' : i === 2 ? 'text-gray-300' : i === 3 ? 'text-orange-400' : 'text-gray-500'}`}>
                         #{i}
                       </span>
-                      <span className="text-gray-400">---</span>
+                      <span className="text-gray-400">{leaderboard[i - 1] ? (leaderboard[i - 1] as LeaderboardEntry).username : '---'}</span>
                     </div>
-                    <span className="text-gray-500">--</span>
+                    <span className="text-gray-500">{leaderboard[i - 1] ? (leaderboard[i - 1] as LeaderboardEntry).score.toLocaleString() : '--'}</span>
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-gray-600 mt-3">Play to see real scores!</p>
+              <p className="text-xs text-gray-600 mt-3">Hourly leaderboard</p>
             </div>
 
             {/* Related games */}

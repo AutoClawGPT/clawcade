@@ -64,11 +64,7 @@ export default function GamesPage() {
                 </span>
                 <p className="text-gray-400 text-sm line-clamp-2">{game.description}</p>
 
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-purple-500/10">
-                  <div className="flex gap-4 text-xs text-gray-500">
-                    <span>🎮 <span className="text-gray-400">--</span> plays</span>
-                    <span>🏆 <span className="text-gray-400">--</span> best</span>
-                  </div>
+                <div className="mt-4 flex items-center justify-end">
                   <span className="text-purple-400 text-sm font-medium group-hover:translate-x-1 transition-transform inline-block">
                     Play →
                   </span>

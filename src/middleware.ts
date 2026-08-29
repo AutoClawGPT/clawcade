@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 
 // Protected routes that require auth
 const protectedRoutes = ["/dashboard"];
-const publicRoutes = ["/", "/login", "/register", "/api/auth", "/api/games", "/api/agents", "/api/rewards", "/skill.md"];
+const publicRoutes = ["/", "/login", "/register", "/games", "/api", "/skill.md"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -20,8 +20,8 @@ export function middleware(request: NextRequest) {
 
   // Check for protected routes
   if (protectedRoutes.some(route => pathname.startsWith(route))) {
-    // For now, let all dashboard routes through (auth check happens client-side)
-    // In production, verify session cookie or token here
+    // Auth check happens client-side via localStorage
+    // Dashboard layout redirects to /login if no authToken
     return NextResponse.next();
   }
 

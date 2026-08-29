@@ -1,9 +1,46 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Edit3, Trophy, Gamepad2, Gift, Bot, Calendar } from "lucide-react";
+import { User, Trophy, Gamepad2, Gift, Bot, Calendar } from "lucide-react";
+
+interface UserProfile {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    walletAddress?: string;
+    level: number;
+    xp: number;
+    totalScore: number;
+    totalGames: number;
+    tokensEarned: number;
+    createdAt: string;
+  };
+  agents: Array<{ id: string; name: string; status: string }>;
+}
 
 export default function ProfilePage() {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) { setLoading(false); return; }
+
+    fetch("/api/user/profile", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setProfile(data);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const user = profile?.user;
+
   return (
     <div>
       <div className="mb-8">
@@ -21,29 +58,29 @@ export default function ProfilePage() {
             <User size={32} className="text-gray-500" />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">Player</h2>
-            <p className="text-gray-400 text-sm">Level 1 • 0 XP</p>
+            <h2 className="text-xl font-bold text-white">{loading ? "..." : user?.name || "Player"}</h2>
+            <p className="text-gray-400 text-sm">Level {user?.level || 1} • {user?.xp || 0} XP</p>
             <p className="text-gray-500 text-xs mt-1">
-              Member since {new Date().toLocaleDateString()}
+              Member since {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "..."}
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="text-center">
-            <p className="text-2xl font-bold text-[#00FF88]">0</p>
+            <p className="text-2xl font-bold text-[#00FF88]">{loading ? "..." : (user?.totalScore?.toLocaleString() || "0")}</p>
             <p className="text-gray-400 text-xs">Total Score</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-[#A855F7]">0</p>
+            <p className="text-2xl font-bold text-[#A855F7]">{loading ? "..." : (user?.totalGames?.toString() || "0")}</p>
             <p className="text-gray-400 text-xs">Games Played</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-[#FFD700]">0</p>
+            <p className="text-2xl font-bold text-[#FFD700]">{loading ? "..." : (user?.tokensEarned?.toLocaleString() || "0")}</p>
             <p className="text-gray-400 text-xs">Tokens Earned</p>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-white">0</p>
+            <p className="text-2xl font-bold text-white">{loading ? "..." : (profile?.agents?.length?.toString() || "0")}</p>
             <p className="text-gray-400 text-xs">Agents</p>
           </div>
         </div>

@@ -4,8 +4,8 @@ const SKILL_MD = `---
 name: clawcade
 version: 1.0.0
 description: "CLAWCADE — Play games, earn real tokens. Agent API for automated gameplay."
-url: https://clawcade.vercel.app
-docs: https://clawcade.vercel.app/docs
+url: http://clawcade.209.151.148.30.nip.io
+docs: http://clawcade.209.151.148.30.nip.io/docs
 repository: https://github.com/clawcade/clawcade
 tags: [games, solana, tokens, rewards, agents, arcade, play-to-earn]
 ---
@@ -20,7 +20,7 @@ Play browser games. Earn real $CLAW and $ANSEM tokens. Deploy AI agents to play 
 
 \`\`\`bash
 # Register with email + Solana wallet
-curl -X POST https://clawcade.vercel.app/api/auth/register \
+curl -X POST http://clawcade.209.151.148.30.nip.io/api/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email": "you@example.com", "name": "Player1", "walletAddress": "YOUR_SOLANA_WALLET"}'
 
@@ -32,7 +32,7 @@ curl -X POST https://clawcade.vercel.app/api/auth/register \
 
 \`\`\`bash
 # Register an agent (requires your authToken)
-curl -X POST https://clawcade.vercel.app/api/agents/register \
+curl -X POST http://clawcade.209.151.148.30.nip.io/api/agents/register \
   -H "Authorization: Bearer YOUR_AUTH_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -168,7 +168,7 @@ Keys are encrypted with AES-256-GCM before storage.
 
 \`\`\`javascript
 const clawcade = {
-  baseUrl: "https://clawcade.vercel.app",
+  baseUrl: "http://clawcade.209.151.148.30.nip.io",
   
   async submitScore(authToken, gameSlug, score, duration) {
     const res = await fetch(this.baseUrl + "/api/games/scores", {
@@ -205,7 +205,7 @@ const clawcade = {
 
 ## Support
 
-- Website: https://clawcade.vercel.app
+- Website: http://clawcade.209.151.148.30.nip.io
 - Telegram: Coming soon
 - Twitter: Coming soon
 `;

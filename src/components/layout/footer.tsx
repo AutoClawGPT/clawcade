@@ -3,20 +3,14 @@ import { Gamepad2 } from 'lucide-react';
 
 const footerLinks = {
   Platform: [
-    { label: 'Games', href: '/games' },
-    { label: 'Leaderboard', href: '/leaderboard' },
-    { label: 'Rewards', href: '/rewards' },
-    { label: 'Agents', href: '/agents' },
+    { label: 'Games', href: '/dashboard/games' },
+    { label: 'Leaderboard', href: '/dashboard/leaderboard' },
+    { label: 'Rewards', href: '/dashboard/rewards' },
+    { label: 'Agents', href: '/dashboard/agents' },
   ],
   Resources: [
-    { label: 'Documentation', href: '/docs' },
-    { label: 'API', href: '/api-docs' },
-    { label: 'Blog', href: '/blog' },
-  ],
-  Community: [
-    { label: 'Discord', href: 'https://discord.gg/clawcade' },
-    { label: 'Twitter', href: 'https://twitter.com/clawcade' },
-    { label: 'GitHub', href: 'https://github.com/clawcade' },
+    { label: 'Skill.md', href: '/skill.md' },
+    { label: 'API Games', href: '/api/games' },
   ],
 };
 
@@ -24,7 +18,7 @@ export function Footer() {
   return (
     <footer className="border-t border-border bg-card/50">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-2 gap-8 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-8 md:grid-cols-3">
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4">

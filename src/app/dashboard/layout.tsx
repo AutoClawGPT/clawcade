@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Gamepad2,
   Trophy,
@@ -16,6 +16,8 @@ import {
   X,
   Home,
   Swords,
+  LogOut,
+  Plug,
 } from "lucide-react";
 
 const navItems = [
@@ -27,6 +29,7 @@ const navItems = [
   { href: "/dashboard/duels", icon: Swords, label: "Duels" },
   { href: "/dashboard/wallet", icon: Wallet, label: "Wallet" },
   { href: "/dashboard/analytics", icon: BarChart3, label: "Analytics" },
+  { href: "/dashboard/agents/integrations", icon: Plug, label: "Integrations" },
   { href: "/dashboard/profile", icon: User, label: "Profile" },
   { href: "/dashboard/settings", icon: Settings, label: "Settings" },
 ];
@@ -37,7 +40,30 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userName, setUserName] = useState("Player");
+
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
+    const userData = localStorage.getItem("user");
+    if (userData) {
+      try {
+        const u = JSON.parse(userData);
+        setUserName(u.name || "Player");
+      } catch {}
+    }
+  }, [router]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("user");
+    router.push("/login");
+  };
 
   return (
     <div className="min-h-screen bg-black flex">
@@ -79,6 +105,20 @@ export default function DashboardLayout({
               </Link>
             );
           })}
+
+          <div className="border-t border-[#1f1f1f] mt-4 pt-4">
+            <div className="px-3 py-2 mb-2">
+              <p className="text-xs text-gray-500">Signed in as</p>
+              <p className="text-sm text-white font-medium">{userName}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all"
+            >
+              <LogOut size={18} />
+              <span className="text-sm font-medium">Logout</span>
+            </button>
+          </div>
         </nav>
       </aside>
 

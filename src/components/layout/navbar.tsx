@@ -17,24 +17,31 @@ import {
   Bot,
   Menu,
   X,
-  Wallet,
   User,
   Settings,
   LogOut,
 } from 'lucide-react';
 
 const navLinks = [
-  { href: '/games', label: 'Games', icon: Gamepad2 },
-  { href: '/leaderboard', label: 'Leaderboard', icon: Trophy },
-  { href: '/rewards', label: 'Rewards', icon: Gift },
-  { href: '/agents', label: 'Agents', icon: Bot },
+  { href: '/dashboard/games', label: 'Games', icon: Gamepad2 },
+  { href: '/dashboard/leaderboard', label: 'Leaderboard', icon: Trophy },
+  { href: '/dashboard/rewards', label: 'Rewards', icon: Gift },
+  { href: '/dashboard/agents', label: 'Agents', icon: Bot },
 ];
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  // Placeholder: will be replaced with actual wallet/auth state
-  const isConnected = false;
-  const user = null;
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false);
+
+  React.useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    setIsAuthenticated(!!token);
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    window.location.href = '/login';
+  };
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-black/80 backdrop-blur-xl">
@@ -64,39 +71,44 @@ export function Navbar() {
 
           {/* Right side */}
           <div className="flex items-center gap-3">
-            {isConnected && user ? (
+            {isAuthenticated ? (
               <DropdownMenu>
                 <DropdownMenuTrigger>
                   <div className="flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1.5 hover:border-primary/30 transition-colors cursor-pointer">
                     <div className="h-6 w-6 rounded-full bg-primary/20 flex items-center justify-center">
                       <User className="h-3.5 w-3.5 text-primary" />
                     </div>
-                    <span className="hidden sm:block text-sm text-foreground">
-                      {/* user.displayName */}
-                    </span>
                   </div>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.location.href = '/dashboard/profile'}>
                     <User className="mr-2 h-4 w-4" />
                     Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => window.location.href = '/dashboard/settings'}>
                     <Settings className="mr-2 h-4 w-4" />
                     Settings
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
-                    Disconnect
+                    Logout
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Button variant="default" size="sm">
-                <Wallet className="h-4 w-4" />
-                Connect Wallet
-              </Button>
+              <div className="flex items-center gap-2">
+                <Link href="/login">
+                  <Button variant="ghost" size="sm">
+                    Login
+                  </Button>
+                </Link>
+                <Link href="/register">
+                  <Button variant="default" size="sm">
+                    Register
+                  </Button>
+                </Link>
+              </div>
             )}
 
             {/* Mobile hamburger */}

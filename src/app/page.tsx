@@ -9,10 +9,6 @@ import {
   Gamepad2,
   Trophy,
   Bot,
-  Users,
-  Swords,
-  Coins,
-  Cpu,
   ArrowRight,
   Wallet,
   Play,
@@ -20,7 +16,7 @@ import {
   Zap,
   Target,
   TrendingUp,
-  Crown,
+  Coins,
 } from 'lucide-react';
 
 // Animation variants
@@ -42,41 +38,27 @@ const scaleIn = {
   }),
 };
 
-// Stats data
-const stats = [
-  { label: 'Total Players', value: '12,847', icon: Users },
-  { label: 'Games Played', value: '1.2M', icon: Swords },
-  { label: 'Tokens Distributed', value: '45.6M', icon: Coins },
-  { label: 'Active Agents', value: '3,291', icon: Cpu },
-];
-
-// Featured games data
+// Featured games data — real slugs
 const featuredGames = [
   {
-    title: 'Claw Machine',
-    description: 'The classic arcade experience. Grab tokens, NFTs, and rare prizes with precision timing.',
-    players: '4,521',
-    reward: '100 $CLAW',
-    difficulty: 'Medium',
-    slug: 'claw-machine',
+    title: 'Crypto Smash',
+    description: 'Smash matching crypto tiles in this fast-paced puzzle game. Chain combos for bonus points.',
+    difficulty: 'Easy',
+    slug: 'crypto-smash',
     gradient: 'from-green-500/20 to-emerald-500/5',
   },
   {
-    title: 'Token Sniper',
-    description: 'Fast-paced trading game. Buy low, sell high, and beat the market in 60 seconds.',
-    players: '3,187',
-    reward: '250 $CLAW',
-    difficulty: 'Hard',
-    slug: 'token-sniper',
+    title: 'Chomper',
+    description: 'Navigate the maze, chomp pellets, and avoid ghosts in this crypto-themed arcade classic.',
+    difficulty: 'Medium',
+    slug: 'chomper',
     gradient: 'from-purple-500/20 to-violet-500/5',
   },
   {
-    title: 'Block Builder',
-    description: 'Stack blocks to build the tallest tower. One wrong move and it all comes crashing down.',
-    players: '2,890',
-    reward: '75 $CLAW',
-    difficulty: 'Easy',
-    slug: 'block-builder',
+    title: 'Swarm',
+    description: 'Control a swarm of units to conquer territory and defeat rival swarms in real time.',
+    difficulty: 'Hard',
+    slug: 'swarm',
     gradient: 'from-yellow-500/20 to-amber-500/5',
   },
 ];
@@ -104,15 +86,6 @@ const steps = [
     icon: Coins,
     color: 'text-accent',
   },
-];
-
-// Leaderboard preview
-const leaderboard = [
-  { rank: 1, name: 'CryptoKing', score: 98450, change: '+2' },
-  { rank: 2, name: 'ArcadeWolf', score: 87320, change: '-1' },
-  { rank: 3, name: 'NeonQueen', score: 76100, change: '+5' },
-  { rank: 4, name: 'TokenHunter', score: 71890, change: '0' },
-  { rank: 5, name: 'BlockMaster', score: 68540, change: '+3' },
 ];
 
 export default function Home() {
@@ -177,11 +150,13 @@ export default function Home() {
             custom={4}
             variants={fadeInUp}
           >
-            <Button size="xl">
-              <Wallet className="h-5 w-5" />
-              Connect Wallet
-            </Button>
-            <Link href="/games">
+            <Link href="/register">
+              <Button size="xl">
+                <Wallet className="h-5 w-5" />
+                Get Started
+              </Button>
+            </Link>
+            <Link href="/dashboard/games">
               <Button variant="outline" size="xl">
                 <Play className="h-5 w-5" />
                 Browse Games
@@ -191,27 +166,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Stats Bar */}
+      {/* Earn Tokens CTA */}
       <section className="relative border-y border-border bg-card/50 backdrop-blur-sm">
         <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
-            {stats.map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                className="text-center"
-                initial="hidden"
-                whileInView="visible"
-                viewport={{ once: true }}
-                custom={i}
-                variants={fadeInUp}
-              >
-                <stat.icon className="h-5 w-5 text-primary mx-auto mb-2" />
-                <p className="text-2xl sm:text-3xl font-bold text-foreground">
-                  {stat.value}
-                </p>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
-              </motion.div>
-            ))}
+          <div className="text-center">
+            <p className="text-xl font-semibold text-foreground">Earn tokens by playing games</p>
+            <p className="text-sm text-muted-foreground mt-1">Top players win $CLAW rewards every hour</p>
           </div>
         </div>
       </section>
@@ -270,13 +230,8 @@ export default function Home() {
                         {game.description}
                       </p>
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground flex items-center gap-1">
-                          <Users className="h-3 w-3" />
-                          {game.players} playing
-                        </span>
-                        <span className="text-primary font-medium flex items-center gap-1">
-                          <Coins className="h-3 w-3" />
-                          {game.reward}
+                        <span className="text-primary font-medium">
+                          {game.difficulty}
                         </span>
                       </div>
                     </CardContent>
@@ -294,7 +249,7 @@ export default function Home() {
             custom={3}
             variants={fadeInUp}
           >
-            <Link href="/games">
+            <Link href="/dashboard/games">
               <Button variant="ghost" className="gap-2">
                 View All Games
                 <ArrowRight className="h-4 w-4" />
@@ -358,11 +313,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Leaderboard Preview */}
+      {/* Leaderboard CTA */}
       <section className="relative py-20 px-4 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-3xl text-center">
           <motion.div
-            className="text-center mb-12"
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true }}
@@ -371,88 +325,12 @@ export default function Home() {
           >
             <h2 className="text-3xl font-bold text-foreground mb-3 flex items-center justify-center gap-3">
               <Trophy className="h-7 w-7 text-accent" />
-              Top Players
+              Leaderboard
             </h2>
-            <p className="text-muted-foreground">
-              This hour&apos;s leaderboard. Top 3 win $CLAW every hour.
+            <p className="text-muted-foreground mb-6">
+              Compete with players worldwide. Top performers win $CLAW rewards every hour.
             </p>
-          </motion.div>
-
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            custom={1}
-            variants={fadeInUp}
-          >
-            <Card>
-              <CardContent className="p-0">
-                {leaderboard.map((player, i) => (
-                  <div
-                    key={player.rank}
-                    className={`flex items-center gap-4 px-6 py-4 ${
-                      i !== leaderboard.length - 1 ? 'border-b border-border' : ''
-                    } ${player.rank <= 3 ? 'bg-primary/[0.02]' : ''}`}
-                  >
-                    {/* Rank */}
-                    <div className="w-8 text-center">
-                      {player.rank === 1 ? (
-                        <Crown className="h-5 w-5 text-accent mx-auto" />
-                      ) : player.rank <= 3 ? (
-                        <span className="text-accent font-bold font-mono">
-                          {player.rank}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground font-mono">
-                          {player.rank}
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Avatar */}
-                    <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                      <span className="text-xs font-bold text-foreground">
-                        {player.name[0]}
-                      </span>
-                    </div>
-
-                    {/* Name & Score */}
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {player.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground font-mono">
-                        {player.score.toLocaleString()} pts
-                      </p>
-                    </div>
-
-                    {/* Change */}
-                    <div
-                      className={`text-xs font-mono ${
-                        player.change.startsWith('+')
-                          ? 'text-primary'
-                          : player.change === '0'
-                          ? 'text-muted-foreground'
-                          : 'text-destructive'
-                      }`}
-                    >
-                      {player.change === '0' ? '—' : player.change}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          <motion.div
-            className="text-center mt-6"
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true }}
-            custom={2}
-            variants={fadeInUp}
-          >
-            <Link href="/leaderboard">
+            <Link href="/dashboard/leaderboard">
               <Button variant="outline" className="gap-2">
                 View Full Leaderboard
                 <TrendingUp className="h-4 w-4" />
@@ -482,11 +360,13 @@ export default function Home() {
               No deposits required — just play and earn.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Button size="xl">
-                <Wallet className="h-5 w-5" />
-                Connect Wallet
-              </Button>
-              <Link href="/agents">
+              <Link href="/register">
+                <Button size="xl">
+                  <Wallet className="h-5 w-5" />
+                  Get Started
+                </Button>
+              </Link>
+              <Link href="/dashboard/agents">
                 <Button variant="secondary" size="xl">
                   <Bot className="h-5 w-5" />
                   Deploy an Agent
