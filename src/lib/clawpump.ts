@@ -299,6 +299,34 @@ export async function launchTokenGasless(
   return res.json();
 }
 
+export async function launchTokenSelfFunded(
+  params: {
+    name: string;
+    symbol: string;
+    description: string;
+    agentId?: string;
+    agentName?: string;
+    walletAddress?: string;
+    imageUrl?: string;
+    image_url?: string;
+    network?: string;
+    initialBuySol?: number | string;
+    devBuy?: string;
+  },
+  userApiKey?: string
+): Promise<unknown> {
+  const res = await fetch(`${CLAWPUMP_BASE}/api/v1/launch`, {
+    method: "POST",
+    headers: authHeaders(userApiKey),
+    body: JSON.stringify({ ...params, selfFunded: true }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`ClawPump launchTokenSelfFunded: ${res.status} ${text}`);
+  }
+  return res.json();
+}
+
 export async function getAgentMessages(
   agentId: string,
   userApiKey?: string,
@@ -418,6 +446,7 @@ export const clawpump = {
   getWalletSummaries,
   getAgentBalance,
   launchTokenGasless,
+  launchTokenSelfFunded,
   launchPonsToken,
   getPonsLaunches,
   createAutomation,

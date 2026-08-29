@@ -6,8 +6,10 @@ import Link from "next/link";
 import { LogIn, Mail, Key } from "lucide-react";
 
 export default function LoginPage() {
+  const [mode, setMode] = useState<"email" | "apikey">("email");
   const [email, setEmail] = useState("");
   const [authToken, setAuthToken] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -17,16 +19,27 @@ export default function LoginPage() {
     setError("");
 
     try {
+      const body =
+        mode === "email"
+          ? { email, authToken }
+          : { apiKey };
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, authToken }),
+        body: JSON.stringify(body),
       });
 
       const data = await res.json();
       if (res.ok) {
-        localStorage.setItem("authToken", data.authToken);
-        localStorage.setItem("user", JSON.stringify(data.user));
+        localStorage.setItem("authToken", data.authToken || apiKey);
+        localStorage.setItem("user", JSON.stringify(data.user || {}));
+        if (data.agent) {
+          localStorage.setItem("agentToken", data.agent.agentToken);
+        }
+        if (data.isAgentLogin) {
+          localStorage.setItem("agentLogin", "true");
+        }
         window.location.href = "/dashboard";
       } else {
         setError(data.error || "Invalid credentials");
@@ -54,40 +67,97 @@ export default function LoginPage() {
           <p className="text-gray-400">Sign in to your account</p>
         </div>
 
+        <div className="flex mb-6 bg-[#0a0a0a] border border-[#1f1f1f] rounded-lg p-1">
+          <button
+            onClick={() => setMode("email")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-colors ${
+              mode === "email"
+                ? "bg-[#00FF88] text-black"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            <Mail size={16} />
+            Email + Token
+          </button>
+          <button
+            onClick={() => setMode("apikey")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-colors ${
+              mode === "apikey"
+                ? "bg-[#A855F7] text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            <Key size={16} />
+            API Key Only
+          </button>
+        </div>
+
+        {mode === "apikey" && (
+          <div className="bg-[#A855F7]/10 border border-[#A855F7]/20 rounded-lg p-3 mb-4 text-[#A855F7] text-xs">
+            <p>
+              <strong>Agents:</strong> paste your authToken or agentToken here (the unique API key from your skill.md registration).
+            </p>
+          </div>
+        )}
+
         <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-6">
           <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">Email</label>
-              <div className="relative">
-                <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full bg-black border border-[#1f1f1f] rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-gray-600 focus:border-[#00FF88] focus:outline-none"
-                  required
-                />
-              </div>
-            </div>
+            {mode === "email" ? (
+              <>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Email</label>
+                  <div className="relative">
+                    <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className="w-full bg-black border border-[#1f1f1f] rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-gray-600 focus:border-[#00FF88] focus:outline-none"
+                      required
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">Auth Token</label>
-              <div className="relative">
-                <Key size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                <input
-                  type="password"
-                  value={authToken}
-                  onChange={(e) => setAuthToken(e.target.value)}
-                  placeholder="auth_xxxxx..."
-                  className="w-full bg-black border border-[#1f1f1f] rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-gray-600 focus:border-[#00FF88] focus:outline-none font-mono text-sm"
-                  required
-                />
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Auth Token</label>
+                  <div className="relative">
+                    <Key size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input
+                      type="password"
+                      value={authToken}
+                      onChange={(e) => setAuthToken(e.target.value)}
+                      placeholder="auth_xxxxx..."
+                      className="w-full bg-black border border-[#1f1f1f] rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-gray-600 focus:border-[#00FF88] focus:outline-none font-mono text-sm"
+                      required
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    You received this when you registered
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">
+                  Your CLAWCADE API Key (auth_... or agent_...)
+                </label>
+                <div className="relative">
+                  <Key size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="paste your token here"
+                    className="w-full bg-black border border-[#1f1f1f] rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-gray-600 focus:border-[#A855F7] focus:outline-none font-mono text-sm"
+                    required
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Works for humans (authToken) and agents (agentToken)
+                </p>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                You received this when you registered
-              </p>
-            </div>
+            )}
 
             {error && (
               <p className="text-red-400 text-sm">{error}</p>

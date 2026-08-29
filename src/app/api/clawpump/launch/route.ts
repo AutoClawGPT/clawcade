@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { launchTokenGasless, launchPonsToken, listAgents } from "@/lib/clawpump";
+import { launchTokenGasless, launchTokenSelfFunded, launchPonsToken, listAgents } from "@/lib/clawpump";
 import { getUserFromAuth, getClawpumpKey } from "@/lib/route-auth";
 
 // POST /api/clawpump/launch
-// mode: "gasless" | "pons"
+// mode: "gasless" | "pons" | "selffunded"
 export async function POST(req: NextRequest) {
   try {
     const user = await getUserFromAuth(req);
@@ -65,6 +65,30 @@ export async function POST(req: NextRequest) {
         key
       );
       return NextResponse.json({ success: true, result }, { status: 201 });
+    }
+
+    if (mode === "selffunded") {
+      const { agentId, name, symbol, description, imageUrl, network, initialBuySol, devBuy } = body;
+      if (!agentId || !name || !symbol) {
+        return NextResponse.json(
+          { error: "agentId, name, and symbol are required for a self-funded launch" },
+          { status: 400 }
+        );
+      }
+      const result = await launchTokenSelfFunded(
+        {
+          agentId,
+          name,
+          symbol: String(symbol).toUpperCase().slice(0, 12),
+          description: description || `${name}, self-funded token launched from ClawCade.`,
+          imageUrl: imageUrl || undefined,
+          network: network || "pump.fun",
+          initialBuySol: initialBuySol || undefined,
+          devBuy: devBuy || undefined,
+        },
+        key
+      );
+      return NextResponse.json({ success: true, result, message: "Self-funded launch submitted. Your agent wallet pays the launch fee." }, { status: 201 });
     }
 
     // Default: gasless pump.fun launch

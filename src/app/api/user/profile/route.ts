@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { users, agents, rewards, scores } from "@/lib/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { encryptKey, decryptKey } from "@/lib/crypto";
+import { listAgents } from "@/lib/clawpump";
 
 async function getUserFromAuth(authHeader: string | null) {
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -12,6 +14,12 @@ async function getUserFromAuth(authHeader: string | null) {
     .where(eq(users.authToken, token))
     .limit(1);
   return user || null;
+}
+
+// Postgres sum()/count() return strings — coerce to numbers
+function toNum(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // GET /api/user/profile
@@ -35,7 +43,7 @@ export async function GET(req: NextRequest) {
     .orderBy(desc(rewards.createdAt))
     .limit(10);
 
-  // Get user's total score
+  // Get user's total score (sum/count come back as strings from PG)
   const [stats] = await db
     .select({
       totalScore: sql<number>`coalesce(sum(${scores.score}), 0)`,
@@ -43,6 +51,28 @@ export async function GET(req: NextRequest) {
     })
     .from(scores)
     .where(eq(scores.userId, user.id));
+
+  // Check if user has connected a ClawPump key
+  const encryptedKeys = (user.encryptedKeys as Record<string, string>) || {};
+  const hasClawpumpKey = !!encryptedKeys.clawpumpApiKey;
+
+  let clawpumpStatus: { hasKey: boolean; agents: number; error?: string } = {
+    hasKey: hasClawpumpKey,
+    agents: 0,
+  };
+  if (hasClawpumpKey) {
+    try {
+      const key = decryptKey(encryptedKeys.clawpumpApiKey);
+      const agents = await listAgents(key, { fresh: true });
+      clawpumpStatus.agents = agents.length;
+    } catch {
+      clawpumpStatus.hasKey = hasClawpumpKey;
+      clawpumpStatus.error = "ClawPump key could not be verified";
+    }
+  }
+
+  const totalScore = toNum(stats?.totalScore);
+  const totalGames = toNum(stats?.gamesPlayed);
 
   return NextResponse.json({
     user: {
@@ -54,19 +84,21 @@ export async function GET(req: NextRequest) {
       role: user.role,
       level: user.level,
       xp: user.xp,
-      totalScore: stats?.totalScore || 0,
-      totalGames: stats?.gamesPlayed || 0,
+      totalScore,
+      totalGames,
       tokensEarned: user.tokensEarned,
       createdAt: user.createdAt,
     },
-    agents: userAgents.map(a => ({
+    agents: userAgents.map((a) => ({
       id: a.id,
       name: a.name,
       publicKey: a.publicKey,
+      agentToken: a.agentToken,
       status: a.status,
       totalGames: a.totalGames,
       totalScore: a.totalScore,
     })),
     recentRewards,
+    clawpump: clawpumpStatus,
   });
 }

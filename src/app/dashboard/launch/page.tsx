@@ -59,6 +59,8 @@ export default function LaunchPage() {
       const body =
         mode === "pons"
           ? { mode: "pons", agentId, name, symbol, description, payoutWallet }
+          : mode === "selffunded"
+          ? { mode: "selffunded", agentId, name, symbol, description }
           : { mode: "gasless", agentId, symbol, description, name };
 
       const res = await fetch("/api/clawpump/launch", {
@@ -101,7 +103,7 @@ export default function LaunchPage() {
     <div>
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-white mb-2">Launch Studio</h1>
-        <p className="text-gray-400">Launch tokens from your agents on ClawPump</p>
+        <p className="text-gray-400">Launch gasless or self-funded tokens (PONS, pump.fun) from your agents</p>
       </div>
 
       <div className="max-w-2xl space-y-6">
@@ -200,6 +202,14 @@ export default function LaunchPage() {
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />}
               Launch pump.fun (Gasless)
+            </button>
+            <button
+              onClick={() => launch("selffunded")}
+              disabled={loading || !agentId || !name || !symbol}
+              className="flex items-center justify-center gap-2 bg-[#FFD700] text-black font-semibold px-6 py-3 rounded-lg hover:bg-[#FFD700]/90 transition-colors disabled:opacity-50 text-sm flex-1"
+            >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Wallet size={16} />}
+              Launch Self-Funded
             </button>
           </div>
         </motion.div>
