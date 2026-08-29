@@ -7,17 +7,49 @@ import bs58 from "bs58";
 import { v4 as uuid } from "uuid";
 
 function toBytes(input: string): Uint8Array {
-  // Try base58 first (common for Solana)
+  const trimmed = input.trim();
+  if (!trimmed) throw new Error("Empty key provided");
+
+  // Reject EVM / 0x-prefixed addresses — they are NOT Ed25519 keys.
+  if (/^0x/i.test(trimmed)) {
+    throw new Error(
+      "Invalid key format: 0x-prefixed EVM addresses are not Ed25519 keys. " +
+      "publicKey must be a base58 or hex-encoded Ed25519 key."
+    );
+  }
+
+  // Try base58 first (standard Solana/Ed25519 encoding)
   try {
-    const decoded = bs58.decode(input);
-    // base58 of 64-byte key should be ~88 chars, 32-byte ~44 chars
+    const decoded = bs58.decode(trimmed);
     if (decoded.length === 32 || decoded.length === 64) return decoded;
   } catch {}
-  // Try hex
-  if (/^[0-9a-fA-F]+$/.test(input) && (input.length === 64 || input.length === 128)) {
-    return new Uint8Array(Buffer.from(input, "hex"));
+
+  // Try plain hex (64 or 128 chars, no 0x prefix)
+  if (/^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed)) {
+    return new Uint8Array(Buffer.from(trimmed, "hex"));
   }
-  throw new Error("Invalid key format: provide base58 or hex encoded Ed25519 key");
+
+  throw new Error(
+    "Invalid key format: provide a base58-encoded Ed25519 key or a plain hex string (64 or 128 chars). " +
+    "EVM/0x addresses are not accepted."
+  );
+}
+
+
+/**
+ * Validate a Solana wallet address (base58, 32-byte public key).
+ * Used for reward wallets where rewards land. Rejects 0x EVM addresses.
+ */
+export function isValidSolanaWallet(wallet: string): boolean {
+  if (!wallet) return false;
+  const trimmed = wallet.trim();
+  if (/^0x/i.test(trimmed)) return false;
+  try {
+    const decoded = bs58.decode(trimmed);
+    return decoded.length === 32;
+  } catch {
+    return false;
+  }
 }
 
 export interface AgentRegistration {
@@ -31,6 +63,8 @@ export interface AgentRegistration {
   clawpumpWalletAddress?: string;
   persona?: string;
   avatarUrl?: string;
+  rewardWallet?: string;
+  claimMethod?: string;
 }
 
 export async function registerAgent(
@@ -66,6 +100,13 @@ export async function registerAgent(
   // Always use base58 for storage
   const pubKeyStored = data.publicKey ? publicKeyB58 : bs58.encode(derivedPublic);
 
+  // Validate reward wallet if provided (SOL, never 0x EVM)
+  if (data.rewardWallet && !isValidSolanaWallet(data.rewardWallet)) {
+    throw new Error(
+      "Invalid rewardWallet: provide a Solana address (base58, 32-byte). EVM/0x addresses are not accepted."
+    );
+  }
+
   // Generate unique agent token
   const agentToken = `agent_${uuid().replace(/-/g, "")}`;
   
@@ -91,6 +132,8 @@ export async function registerAgent(
     clawpumpWalletAddress: data.clawpumpWalletAddress || null,
     persona: data.persona || null,
     avatarUrl: data.avatarUrl || null,
+    rewardWallet: data.rewardWallet ? data.rewardWallet.trim() : null,
+    claimMethod: data.claimMethod || "manual",
     createdAt: new Date(),
     updatedAt: new Date(),
   }).returning();
@@ -143,6 +186,10 @@ export async function updateAgent(
     image: string;
     skills: string[];
     status: string;
+    rewardWallet: string | null;
+    claimMethod: string;
+    avatarUrl: string | null;
+    twitterHandle: string | null;
   }>
 ) {
   const [agent] = await db

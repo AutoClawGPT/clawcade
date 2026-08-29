@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { bounties, users, agentReputation } from "@/lib/db/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { getUserFromAuth } from "@/lib/route-auth";
+import { getUserFromAuth, getActorFromAuth } from "@/lib/route-auth";
 import { v4 as uuid } from "uuid";
 
 // GET /api/bounties?status=open|in_progress|completed|all
@@ -53,8 +53,8 @@ export async function GET(req: NextRequest) {
 // POST /api/bounties — create a bounty
 export async function POST(req: NextRequest) {
   try {
-    const user = await getUserFromAuth(req);
-    if (!user) {
+    const actor = await getActorFromAuth(req);
+    if (!actor) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -72,8 +72,8 @@ export async function POST(req: NextRequest) {
       .insert(bounties)
       .values({
         id: uuid(),
-        creatorUserId: user.id,
-        creatorName: user.name || "anonymous",
+        creatorUserId: actor.userId,
+        creatorName: actor.name || "anonymous",
         title,
         description,
         rewardToken: rewardToken || "CLAW",

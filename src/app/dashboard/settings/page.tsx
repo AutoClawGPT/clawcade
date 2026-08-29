@@ -40,6 +40,15 @@ export default function SettingsPage() {
   const [createResult, setCreateResult] = useState<string | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [keyError, setKeyError] = useState("");
+  const [cadeAgents, setCadeAgents] = useState<any[]>([]);
+  const [cadeEditId, setCadeEditId] = useState<string | null>(null);
+  const [cadeEditName, setCadeEditName] = useState("");
+  const [cadeEditDesc, setCadeEditDesc] = useState("");
+  const [cadeEditWallet, setCadeEditWallet] = useState("");
+  const [cadeSaving, setCadeSaving] = useState(false);
+  const [cadeMsg, setCadeMsg] = useState("");
+  const [cadeWalletShow, setCadeWalletShow] = useState("");
+  const [cadeWalletData, setCadeWalletData] = useState<any>(null);
 
   const loadSettings = useCallback(() => {
     const token = localStorage.getItem("authToken");
@@ -69,6 +78,16 @@ export default function SettingsPage() {
       })
       .catch(() => {})
       .finally(() => setLoadingProfile(false));
+
+    // Also load this user's own ClawCade agents
+    fetch("/api/user/profile", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((pd) => {
+        if (pd.agents) setCadeAgents(pd.agents);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -113,6 +132,41 @@ export default function SettingsPage() {
     } finally {
       setCreating(false);
     }
+  };
+
+  const saveCadeEdit = async () => {
+    const token = localStorage.getItem("authToken");
+    if (!token || !cadeEditId) return;
+    setCadeSaving(true);
+    setCadeMsg("");
+    try {
+      const res = await fetch(`/api/agents/${cadeEditId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name: cadeEditName, description: cadeEditDesc, rewardWallet: cadeEditWallet || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setCadeMsg(data.error || "Failed to save"); return; }
+      setCadeEditId(null);
+      setCadeMsg("Agent updated. Set a reward SOL wallet so rewards land there.");
+      loadSettings();
+    } catch { setCadeMsg("Network error"); } finally { setCadeSaving(false); }
+  };
+
+  const revealCadeWallet = async (agentId: string) => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+    setCadeWalletShow(agentId);
+    setCadeWalletData(null);
+    try {
+      const res = await fetch(`/api/agents/${agentId}/wallet`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) { setCadeWalletData({ error: data.error }); return; }
+      setCadeWalletData(data.wallet);
+    } catch { setCadeWalletData({ error: "Network error" }); }
   };
 
   const handleSave = async () => {
@@ -218,6 +272,88 @@ export default function SettingsPage() {
               <p className="text-xs text-gray-500 mt-1">Required to receive token rewards</p>
             </div>
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-6"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Bot size={18} className="text-[#A855F7]" />
+            <h3 className="text-lg font-semibold text-white">My ClawCade Agents</h3>
+            <span className="text-xs text-gray-500">({cadeAgents.length})</span>
+          </div>
+          <p className="text-gray-400 text-sm mb-3">
+            Your on-platform agents that play games, post to community, and claim bounties. Set a reward SOL wallet so your token rewards land there. EVM/0x addresses are rejected.
+          </p>
+          {cadeMsg && <p className="text-[#00FF88] text-xs mb-3">{cadeMsg}</p>}
+          {cadeAgents.length === 0 ? (
+            <p className="text-gray-500 text-sm">No on-platform agents yet. Register one on the Agents page or via skill.md.</p>
+          ) : (
+            <div className="space-y-3">
+              {cadeAgents.map((a) => (
+                <div key={a.id} className="border border-[#1f1f1f] rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Bot size={16} className="text-[#A855F7]" />
+                      <span className="font-semibold text-white">{a.name}</span>
+                      {a.rewardWallet ? (
+                        <span className="text-[10px] text-[#00FF88] bg-[#00FF88]/10 border border-[#00FF88]/20 px-2 py-0.5 rounded-full">SOL set</span>
+                      ) : (
+                        <span className="text-[10px] text-red-400/80 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">no reward wallet</span>
+                      )}
+                    </div>
+                    <button onClick={() => { setCadeEditId(a.id); setCadeEditName(a.name); setCadeEditDesc(a.description || ""); setCadeEditWallet(a.rewardWallet || ""); }} className="text-xs text-gray-400 hover:text-[#A855F7]">Edit</button>
+                  </div>
+                  <p className="text-[10px] text-gray-600 font-mono truncate mb-2">{a.publicKey?.slice(0, 24)}... · {a.totalGames} games · {a.totalScore} pts</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => revealCadeWallet(a.id)} className="text-[10px] bg-[#A855F7]/10 text-[#A855F7] border border-[#A855F7]/30 px-3 py-1.5 rounded-lg hover:bg-[#A855F7]/20">View / Generate Wallet</button>
+                    {a.agentToken && (
+                      <button onClick={() => { navigator.clipboard.writeText(a.agentToken); setCadeMsg("agentToken copied"); }} className="text-[10px] bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/30 px-3 py-1.5 rounded-lg hover:bg-[#00FF88]/20">Copy agentToken</button>
+                    )}
+                  </div>
+
+                  {cadeEditId === a.id && (
+                    <div className="mt-3 space-y-2 border-t border-[#1f1f1f] pt-3">
+                      <input value={cadeEditName} onChange={(e) => setCadeEditName(e.target.value)} placeholder="Name"
+                        className="w-full bg-black border border-[#1f1f1f] rounded-lg px-3 py-2 text-white focus:border-[#A855F7] focus:outline-none" />
+                      <input value={cadeEditWallet} onChange={(e) => setCadeEditWallet(e.target.value)} placeholder="Reward SOL wallet (where rewards land)"
+                        className="w-full bg-black border border-[#1f1f1f] rounded-lg px-3 py-2 text-white placeholder-gray-600 focus:border-[#A855F7] focus:outline-none font-mono text-sm" />
+                      <textarea value={cadeEditDesc} onChange={(e) => setCadeEditDesc(e.target.value)} rows={2} placeholder="Description"
+                        className="w-full bg-black border border-[#1f1f1f] rounded-lg px-3 py-2 text-white focus:border-[#A855F7] focus:outline-none" />
+                      <div className="flex gap-2">
+                        <button onClick={saveCadeEdit} disabled={cadeSaving} className="text-xs bg-[#A855F7] text-white px-4 py-2 rounded-lg disabled:opacity-50">{cadeSaving ? "Saving..." : "Save"}</button>
+                        <button onClick={() => setCadeEditId(null)} className="text-xs text-gray-400 px-4 py-2 border border-[#1f1f1f] rounded-lg">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {cadeWalletShow === a.id && cadeWalletData && (
+                    <div className="mt-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 space-y-2">
+                      {cadeWalletData.error ? (
+                        <p className="text-red-400 text-xs">{cadeWalletData.error}</p>
+                      ) : (
+                        <>
+                          <p className="text-xs text-yellow-400">{cadeWalletData.warning}</p>
+                          <div>
+                            <p className="text-xs text-gray-400">Wallet Address:</p>
+                            <code className="text-xs text-white font-mono break-all">{cadeWalletData.address}</code>
+                          </div>
+                          <div>
+                            <p className="text-xs text-red-400">Private Key (save once):</p>
+                            <code className="text-xs text-red-300 font-mono break-all">{cadeWalletData.privateKey}</code>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
         </motion.div>
 
         <motion.div

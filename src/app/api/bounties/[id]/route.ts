@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { bounties, users, agentReputation } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { getUserFromAuth } from "@/lib/route-auth";
+import { getUserFromAuth, getActorFromAuth } from "@/lib/route-auth";
 
 // GET /api/bounties/:id — get one bounty
 export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
@@ -19,11 +19,11 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
   }
 }
 
-// POST /api/bounties/:id — claim | complete | dispute
+// POST /api/bounties/:id — claim | complete | dispute (humans AND agents via Bearer)
 export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
   try {
-    const user = await getUserFromAuth(req);
-    if (!user) {
+    const actor = await getActorFromAuth(req);
+    if (!actor) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     const { id } = await ctx.params;
@@ -41,13 +41,13 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
       }
       await db
         .update(bounties)
-        .set({ status: "in_progress", assigneeUserId: user.id, updatedAt: new Date() })
+        .set({ status: "in_progress", assigneeUserId: actor.userId, updatedAt: new Date() })
         .where(eq(bounties.id, id));
       return NextResponse.json({ success: true, message: "Bounty claimed!" });
     }
 
     if (action === "complete") {
-      if (bounty.assigneeUserId !== user.id) {
+      if (bounty.assigneeUserId !== actor.userId) {
         return NextResponse.json({ error: "Only the assignee can complete this bounty" }, { status: 403 });
       }
       if (!proofUrl) {
@@ -58,40 +58,39 @@ export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
         .set({ status: "completed", proofUrl, updatedAt: new Date() })
         .where(eq(bounties.id, id));
 
-      // Bump reputation (+25 per completed bounty)
-      const rep = await db
+      // +25 rep for the actor (agent reps are keyed on owner user id; also bump agentReputation row)
+      const [rep] = await db
         .select()
         .from(agentReputation)
-        .where(eq(agentReputation.userId, user.id))
+        .where(eq(agentReputation.userId, actor.userId))
         .limit(1);
-      if (rep.length) {
-        const base = (rep[0].reputationScore || 0) + 25;
-        const tier =
-          base >= 1000 ? "platinum" : base >= 500 ? "gold" : base >= 100 ? "silver" : base >= 10 ? "bronze" : "unrated";
+      if (rep) {
         await db
           .update(agentReputation)
           .set({
-            totalBounties: (rep[0].totalBounties || 0) + 1,
-            completedBounties: (rep[0].completedBounties || 0) + 1,
-            reputationScore: base,
-            trustTier: tier,
+            completedBounties: (rep.completedBounties || 0) + 1,
+            totalBounties: (rep.totalBounties || 0) + 1,
+            reputationScore: (rep.reputationScore || 0) + 25,
             updatedAt: new Date(),
           })
-          .where(eq(agentReputation.id, rep[0].id));
+          .where(eq(agentReputation.id, rep.id));
       }
 
-      return NextResponse.json({ success: true, message: "Bounty completed! Reputation boosted." });
+      return NextResponse.json({ success: true, message: "Bounty completed!" });
     }
 
     if (action === "dispute") {
+      if (bounty.creatorUserId !== actor.userId && bounty.assigneeUserId !== actor.userId) {
+        return NextResponse.json({ error: "Not authorized to dispute" }, { status: 403 });
+      }
       await db
         .update(bounties)
         .set({ status: "disputed", updatedAt: new Date() })
         .where(eq(bounties.id, id));
-      return NextResponse.json({ success: true, message: "Bounty disputed — pending review." });
+      return NextResponse.json({ success: true, message: "Bounty disputed" });
     }
 
-    return NextResponse.json({ error: "action must be 'claim', 'complete', or 'dispute'" }, { status: 400 });
+    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: msg }, { status: 500 });

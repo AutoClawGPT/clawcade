@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { scores, users, games } from "@/lib/db/schema";
-import { eq, desc, sql, gte } from "drizzle-orm";
+import { scores, users, agents, games } from "@/lib/db/schema";
+import { eq, desc, sql, gte, and } from "drizzle-orm";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const period = searchParams.get("period") || "alltime";
-  const gameSlug = searchParams.get("game");
+  const gameSlug = searchParams.get("game") || searchParams.get("gameSlug");
   const limit = parseInt(searchParams.get("limit") || "100");
 
   const now = new Date();
   let since: Date;
-
   switch (period) {
     case "hourly":
       since = new Date(now.getTime() - 60 * 60 * 1000);
@@ -26,56 +25,67 @@ export async function GET(req: NextRequest) {
       since = new Date(0);
   }
 
-  let query = db
+  let gameId: string | null = null;
+  if (gameSlug) {
+    const [game] = await db.select({ id: games.id }).from(games).where(eq(games.slug, gameSlug)).limit(1);
+    gameId = game?.id || null;
+  }
+
+  // Agent scores (agents submitted via agentToken)
+  const agentBase = db
     .select({
-      userId: scores.userId,
-      userName: users.name,
-      userImage: users.image,
-      totalScore: sql<number>`sum(${scores.score})`.as("total_score"),
+      key: sql<string>`'agent:' || ${agents.id}::text`.as("key"),
+      agentId: agents.id,
+      actorName: agents.name,
+      actorImage: agents.avatarUrl,
+      totalScore: sql<number>`coalesce(sum(${scores.score}),0)`.as("total_score"),
       gamesPlayed: sql<number>`count(*)`.as("games_played"),
       bestScore: sql<number>`max(${scores.score})`.as("best_score"),
     })
     .from(scores)
-    .leftJoin(users, eq(scores.userId, users.id))
-    .where(gte(scores.createdAt, since))
-    .groupBy(scores.userId, users.name, users.image)
-    .orderBy(desc(sql`sum(${scores.score})`))
-    .limit(limit);
+    .innerJoin(agents, eq(scores.agentId, agents.id))
+    .where(gameId ? and(gte(scores.createdAt, since), eq(scores.gameId, gameId)) : gte(scores.createdAt, since))
+    .groupBy(agents.id, agents.name, agents.avatarUrl);
 
-  if (gameSlug) {
-    const [game] = await db.select().from(games).where(eq(games.slug, gameSlug)).limit(1);
-    if (game) {
-      query = db
-        .select({
-          userId: scores.userId,
-          userName: users.name,
-          userImage: users.image,
-          totalScore: sql<number>`sum(${scores.score})`.as("total_score"),
-          gamesPlayed: sql<number>`count(*)`.as("games_played"),
-          bestScore: sql<number>`max(${scores.score})`.as("best_score"),
-        })
-        .from(scores)
-        .leftJoin(users, eq(scores.userId, users.id))
-        .where(sql`${scores.createdAt} >= ${since} AND ${scores.gameId} = ${game.id}`)
-        .groupBy(scores.userId, users.name, users.image)
-        .orderBy(desc(sql`sum(${scores.score})`))
-        .limit(limit);
-    }
-  }
+  const agentRows = await agentBase.orderBy(desc(sql`sum(${scores.score})`)).limit(limit);
 
-  const results = await query;
+  // Human scores (no agent)
+  const humanBase = db
+    .select({
+      key: sql<string>`'user:' || ${users.id}::text`.as("key"),
+      userId: users.id,
+      actorName: users.name,
+      actorImage: users.image,
+      totalScore: sql<number>`coalesce(sum(${scores.score}),0)`.as("total_score"),
+      gamesPlayed: sql<number>`count(*)`.as("games_played"),
+      bestScore: sql<number>`max(${scores.score})`.as("best_score"),
+    })
+    .from(scores)
+    .innerJoin(users, eq(scores.userId, users.id))
+    .where(gameId
+      ? and(gte(scores.createdAt, since), eq(scores.gameId, gameId), sql`${scores.agentId} is null`)
+      : and(gte(scores.createdAt, since), sql`${scores.agentId} is null`))
+    .groupBy(users.id, users.name, users.image);
+
+  const humanRows = await humanBase.orderBy(desc(sql`sum(${scores.score})`)).limit(limit);
+
+  const merged = [...agentRows, ...humanRows]
+    .sort((a, b) => (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0))
+    .slice(0, limit);
 
   return NextResponse.json({
     period,
     game: gameSlug || "all",
-    leaderboard: results.map((r, i) => ({
+    leaderboard: merged.map((r, i) => ({
       rank: i + 1,
       userId: r.userId,
-      name: r.userName,
-      image: r.userImage,
-      totalScore: r.totalScore,
-      gamesPlayed: r.gamesPlayed,
-      bestScore: r.bestScore,
+      agentId: r.agentId,
+      isAgent: !!r.agentId,
+      name: r.actorName,
+      image: r.actorImage,
+      totalScore: Number(r.totalScore) || 0,
+      gamesPlayed: Number(r.gamesPlayed) || 0,
+      bestScore: Number(r.bestScore) || 0,
     })),
   });
 }

@@ -1,47 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { distributeHourlyRewards, distributeDailyRewards, distributeWeeklyRewards } from "@/lib/rewards";
-import { db } from "@/lib/db";
-import { platformConfig } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { runDistribution } from "@/lib/distribution";
 
-// POST /api/rewards/distribute — Trigger reward distribution (admin/cron only)
+// POST /api/rewards/distribute — Trigger reward pipeline (cron/admin only)
+// Uses the TREASURY + DISTRIBUTOR platform agents. Prizes only go to
+// agents/players that provided a claim SOL wallet.
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET || "clawcade-cron-secret";
 
-  // Allow cron secret or admin token
   if (authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json(
-      { error: "Unauthorized" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await req.json();
-  const { type } = body; // "hourly" | "daily" | "weekly"
+  try {
+    const body = await req.json();
+    const { type } = body; // "hourly" | "daily" | "weekly"
 
-  let results;
-  switch (type) {
-    case "hourly":
-      results = await distributeHourlyRewards();
-      break;
-    case "daily":
-      results = await distributeDailyRewards();
-      break;
-    case "weekly":
-      results = await distributeWeeklyRewards();
-      break;
-    default:
+    if (!["hourly", "daily", "weekly"].includes(type)) {
       return NextResponse.json(
         { error: "Invalid type. Use: hourly, daily, weekly" },
         { status: 400 }
       );
-  }
+    }
 
-  return NextResponse.json({
-    success: true,
-    type,
-    distributed: results.length,
-    results,
-  });
+    const result = await runDistribution(type);
+    return NextResponse.json({ success: true, ...result });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

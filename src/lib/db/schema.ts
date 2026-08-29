@@ -38,6 +38,9 @@ export const users = pgTable(
     tokensEarned: real("tokens_earned").notNull().default(0),
     encryptedKeys: jsonb("encrypted_keys"), // { clawpumpApiKey, ... }
     payoutWallet: varchar("payout_wallet", { length: 64 }),
+    rewardWallet: varchar("reward_wallet", { length: 64 }),
+    claimMethod: varchar("claim_method", { length: 20 }).notNull().default("manual"),
+    walletSecretEncrypted: text("wallet_secret_encrypted"),
     twitterHandle: varchar("twitter_handle", { length: 64 }),
     twitterVerified: boolean("twitter_verified").notNull().default(false),
     twitterVerifyCode: varchar("twitter_verify_code", { length: 64 }),
@@ -83,6 +86,9 @@ export const agents = pgTable(
     twitterHandle: varchar("twitter_handle", { length: 64 }),
     trustTier: varchar("trust_tier", { length: 20 }).notNull().default("unrated"),
     reputationScore: integer("reputation_score").notNull().default(0),
+    rewardWallet: varchar("reward_wallet", { length: 64 }),
+    claimMethod: varchar("claim_method", { length: 20 }).notNull().default("manual"),
+    walletSecretEncrypted: text("wallet_secret_encrypted"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -156,6 +162,7 @@ export const rewards = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
     type: varchar("type", { length: 20 }).notNull(), // hourly | daily | weekly | treasure
     amount: real("amount").notNull(),
     token: varchar("token", { length: 16 }).notNull().default("CLAW"), // CLAW | ANSEM
@@ -403,6 +410,65 @@ export const uploadedImages = pgTable(
     data: text("data").notNull(), // base64 of the image bytes
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   }
+);
+
+// ──────────────────────────────────────────────
+// COMMUNITY (posts, comments, likes, follows)
+// ──────────────────────────────────────────────
+export const communityPosts = pgTable(
+  "community_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id),
+    agentId: uuid("agent_id").references(() => agents.id),
+    content: text("content").notNull(),
+    kind: varchar("kind", { length: 20 }).notNull().default("post"), // post | score | launch | bounty
+    score: integer("score"),
+    gameSlug: varchar("game_slug", { length: 64 }),
+    refId: varchar("ref_id", { length: 64 }),
+    likes: integer("likes").notNull().default(0),
+    comments: integer("comments").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("community_posts_user_idx").on(t.userId), index("community_posts_agent_idx").on(t.agentId), index("community_posts_created_idx").on(t.createdAt)]
+);
+
+export const communityComments = pgTable(
+  "community_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").references(() => communityPosts.id, { onDelete: "cascade" }).notNull(),
+    userId: uuid("user_id").references(() => users.id),
+    agentId: uuid("agent_id").references(() => agents.id),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("community_comments_post_idx").on(t.postId)]
+);
+
+export const communityLikes = pgTable(
+  "community_likes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    postId: uuid("post_id").references(() => communityPosts.id, { onDelete: "cascade" }).notNull(),
+    userId: uuid("user_id").references(() => users.id),
+    agentId: uuid("agent_id").references(() => agents.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("community_likes_unique_idx").on(t.postId, t.userId, t.agentId)]
+);
+
+export const communityFollows = pgTable(
+  "community_follows",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    followerUserId: uuid("follower_user_id").references(() => users.id),
+    followerAgentId: uuid("follower_agent_id").references(() => agents.id),
+    followingUserId: uuid("following_user_id").references(() => users.id),
+    followingAgentId: uuid("following_agent_id").references(() => agents.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("community_follows_unique_idx").on(t.followerUserId, t.followerAgentId, t.followingUserId, t.followingAgentId)]
 );
 
 // ──────────────────────────────────────────────

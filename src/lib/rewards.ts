@@ -4,26 +4,45 @@ import { eq, desc, sql, and, gte } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 
 // Reward distribution configuration
+// Hard caps: single reward never exceeds 1000; CLAW <= 100 per reward, ANSEM <= 100 per reward.
+export const REWARD_CAPS = {
+  MAX_SINGLE: 1000,
+  CLAW_MAX: 100,
+  ANSEM_MAX: 100,
+  PLATFORM_MAX: 1000,
+};
+
+export function clampReward(amount: number, token: string): number {
+  const capped = Math.max(0, Math.floor(amount));
+  const tokenCap =
+    token === "CLAW" ? REWARD_CAPS.CLAW_MAX :
+    token === "ANSEM" ? REWARD_CAPS.ANSEM_MAX :
+    token === "PLATFORM" ? REWARD_CAPS.PLATFORM_MAX :
+    REWARD_CAPS.MAX_SINGLE;
+  return Math.min(capped, tokenCap);
+}
+
+// Reward distribution configuration
 export const REWARD_CONFIG = {
   HOURLY: {
     // Top 3 players each hour get CLAW tokens
     topN: 3,
-    amounts: [1000, 500, 250], // CLAW tokens for 1st, 2nd, 3rd
+    amounts: [100, 50, 25], // CLAW tokens for 1st, 2nd, 3rd
     token: "CLAW",
     intervalMs: 60 * 60 * 1000, // 1 hour
   },
   DAILY: {
     // Top 10 players each day get CLAW tokens
     topN: 10,
-    amounts: [5000, 3000, 2000, 1000, 1000, 500, 500, 500, 250, 250],
+    amounts: [100, 90, 80, 70, 60, 50, 40, 30, 20, 10],
     token: "CLAW",
     intervalMs: 24 * 60 * 60 * 1000,
   },
   WEEKLY: {
     // ALL active players get ANSEM tokens based on score
     topN: null, // all active
-    baseAmount: 100, // minimum ANSEM for being active
-    bonusPerScore: 0.01, // bonus ANSEM per score point
+    baseAmount: 20, // minimum ANSEM for being active
+    bonusPerScore: 0.002, // bonus ANSEM per score point
     token: "ANSEM",
     intervalMs: 7 * 24 * 60 * 60 * 1000,
   },
@@ -98,7 +117,7 @@ export async function distributeHourlyRewards() {
 
   for (let i = 0; i < topPlayers.length; i++) {
     const player = topPlayers[i];
-    const amount = config.amounts[i];
+    const amount = clampReward(config.amounts[i], config.token);
 
     if (!player.walletAddress) continue;
 
@@ -136,7 +155,7 @@ export async function distributeDailyRewards() {
 
   for (let i = 0; i < topPlayers.length; i++) {
     const player = topPlayers[i];
-    const amount = config.amounts[i];
+    const amount = clampReward(config.amounts[i], config.token);
 
     if (!player.walletAddress) continue;
 
@@ -174,8 +193,9 @@ export async function distributeWeeklyRewards() {
   for (const player of allActive) {
     if (!player.walletAddress) continue;
 
-    const amount = Math.floor(
-      config.baseAmount + player.totalScore * config.bonusPerScore
+    const amount = clampReward(
+      Math.floor(config.baseAmount + player.totalScore * config.bonusPerScore),
+      config.token
     );
 
     const [reward] = await db.insert(rewards).values({
@@ -224,3 +244,23 @@ export async function getTotalRewardsDistributed() {
 
   return result;
 }
+
+// ──────────────────────────────────────────────
+// TOKEN DISPLAY INFO (live addresses + platform placeholder)
+// ──────────────────────────────────────────────
+export const TOKEN_INFO = {
+  CLAW: {
+    symbol: "CLAW",
+    name: "ClawCade Token",
+    address: "739dnZEG4yaBWFsY8L8ZwrfhGG6dhtCSercW8Umspump",
+    chain: "Solana (pump.fun)",
+    live: true,
+  },
+  ANSEM: {
+    symbol: "ANSEM",
+    name: "Ansem Token",
+    address: "9cRCn9rGT8V2imeM2BaKs13yhMEais3ruM3rPvTGpump",
+    chain: "Solana (pump.fun)",
+    live: true,
+  },
+};

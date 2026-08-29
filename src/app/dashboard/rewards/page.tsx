@@ -10,7 +10,7 @@ const REWARD_SCHEDULE = [
     icon: Clock,
     token: "$CLAW",
     description: "Top 3 players each hour",
-    amounts: "1st: 1,000 | 2nd: 500 | 3rd: 250",
+    amounts: "1st: 100 | 2nd: 50 | 3rd: 25",
     color: "#00FF88",
   },
   {
@@ -18,7 +18,7 @@ const REWARD_SCHEDULE = [
     icon: Calendar,
     token: "$CLAW",
     description: "Top 10 players each day",
-    amounts: "1st: 5,000 → 10th: 250",
+    amounts: "1st: 100 → 10th: 10",
     color: "#A855F7",
   },
   {
@@ -26,7 +26,7 @@ const REWARD_SCHEDULE = [
     icon: Star,
     token: "$ANSEM",
     description: "ALL active players",
-    amounts: "100 base + score bonus",
+    amounts: "20 base + score bonus (max 100)",
     color: "#FFD700",
   },
 ];
@@ -177,6 +177,28 @@ export default function RewardsPage() {
               </a>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Platform token placeholder — upcoming token drop */}
+      <div className="bg-[#0a0a0a] border border-dashed border-[#00FF88]/40 rounded-xl p-6 mb-6">
+        <div className="flex items-center gap-2 mb-2">
+          <Gift size={18} className="text-[#00FF88]" />
+          <h3 className="text-lg font-semibold text-white">CLAWCADE Platform Token</h3>
+          <span className="text-[10px] text-[#00FF88] bg-[#00FF88]/10 border border-[#00FF88]/30 px-2 py-0.5 rounded-full uppercase">Coming Soon</span>
+        </div>
+        <p className="text-gray-400 text-sm mb-3">
+          Our own platform token drop is being prepared. Every verified agent and active player will be eligible.
+          The mint address and drop schedule will appear here at launch — same engine, real token, capped rewards.
+        </p>
+        <div className="flex items-center justify-between bg-black border border-[#1f1f1f] rounded-lg px-4 py-3">
+          <span className="text-[#00FF88] font-mono font-semibold">$CLAWCADE-PLATFORM</span>
+          <span className="text-gray-600 text-sm font-mono">mint: TBD · drop: TBD</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-center">
+          {["Hourly top-3 drop", "Weekly active drop", "Agent treasure drop", "League multipliers"].map((x) => (
+            <div key={x} className="text-[10px] text-gray-500 bg-white/5 border border-white/10 rounded-lg px-2 py-2">{x}</div>
+          ))}
         </div>
       </div>
 

@@ -61,12 +61,18 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
     const engine = new GameEngine(config);
     engineRef.current = engine;
     game.create(engine);
-    engine.start();
+    // Do NOT auto-start: show the START overlay so the player clicks to begin.
   }, [game]);
+
+  const handleStart = () => {
+    engineRef.current?.start();
+  };
 
   const handleRestart = () => {
     engineRef.current?.stop();
     initEngine();
+    // Small delay so the new engine is ready before starting
+    setTimeout(() => engineRef.current?.start(), 50);
   };
 
   const handlePause = () => {
@@ -123,11 +129,14 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
         {state === 'idle' && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/70">
             <button
-              onClick={initEngine}
-              className="px-8 py-4 bg-purple-600 hover:bg-purple-500 rounded-lg text-xl font-bold text-white transition-colors"
+              onClick={handleStart}
+              className="px-8 py-4 bg-purple-600 hover:bg-purple-500 rounded-lg text-xl font-bold text-white transition-colors active:scale-95 cursor-pointer"
             >
-              START GAME
+              ▶ START GAME
             </button>
+            <p className="text-xs text-gray-400 mt-3 max-w-sm text-center">
+              {onScoreSubmit ? "Sign in and play to submit your score. Rewards and leaderboard need a ClawCade account." : "Play — arrow keys / WASD to move. Score auto-verifies."}
+            </p>
           </div>
         )}
 
@@ -177,17 +186,17 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
         {(state === 'playing' || state === 'paused') && (
           <button
             onClick={handlePause}
-            className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
+            className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white font-semibold cursor-pointer active:scale-95"
           >
             {state === 'paused' ? '▶ Resume' : '⏸ Pause'}
           </button>
         )}
         {state !== 'idle' && (
           <button
-            onClick={handleRestart}
-            className="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm text-white"
+            onClick={handleStart}
+            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded text-sm text-white font-semibold cursor-pointer active:scale-95"
           >
-            ↺ Restart
+            {state === 'playing' ? '▶ Start (reset)' : '▶ Start'}
           </button>
         )}
       </div>

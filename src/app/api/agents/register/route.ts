@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, description, image, publicKey, secretKey, skills, clawpumpAgentId, clawpumpWalletAddress, persona, avatarUrl } = body;
+  const { name, description, image, publicKey, secretKey, skills, clawpumpAgentId, clawpumpWalletAddress, persona, avatarUrl, rewardWallet, claimMethod } = body;
 
   if (!name) {
     return NextResponse.json(
@@ -53,6 +53,8 @@ export async function POST(req: NextRequest) {
       clawpumpWalletAddress,
       persona,
       avatarUrl,
+      rewardWallet,
+      claimMethod,
     });
 
     return NextResponse.json({

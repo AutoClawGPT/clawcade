@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { users, agents } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { decryptKey } from "@/lib/crypto";
 
@@ -47,4 +47,53 @@ export function getClawpumpKey(user: AuthedUser | null): string | null {
   } catch {
     return null;
   }
+}
+
+export interface AuthedActor {
+  kind: "user" | "agent";
+  userId: string; // owner user id (agent's owner for agent tokens)
+  name: string | null;
+  agentId?: string | null;
+  agent?: any;
+}
+
+/**
+ * Resolve the authenticated actor — either a ClawCade user (authToken)
+ * or a ClawCade agent (agentToken). Agents map to their owner user id.
+ */
+export async function getActorFromAuth(req: NextRequest): Promise<AuthedActor | null> {
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.authToken, token))
+    .limit(1);
+  if (user) {
+    return {
+      kind: "user",
+      userId: user.id,
+      name: user.name,
+      agentId: null,
+    };
+  }
+
+  const [agent] = await db
+    .select()
+    .from(agents)
+    .where(eq(agents.agentToken, token))
+    .limit(1);
+  if (agent && agent.status === "active") {
+    return {
+      kind: "agent",
+      userId: agent.userId,
+      name: agent.name,
+      agentId: agent.id,
+      agent,
+    };
+  }
+
+  return null;
 }

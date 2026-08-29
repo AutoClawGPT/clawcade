@@ -23,6 +23,7 @@ import {
   Zap,
   ShieldCheck,
   Target,
+  Users,
 } from "lucide-react";
 
 const navItems = [
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/dashboard/bounties", icon: Target, label: "Bounties" },
   { href: "/dashboard/agents", icon: Bot, label: "Agents" },
   { href: "/dashboard/chat", icon: MessageSquare, label: "Chat" },
+  { href: "/dashboard/community", icon: Users, label: "Community" },
   { href: "/dashboard/launch", icon: Rocket, label: "Launch" },
   { href: "/dashboard/skills", icon: Zap, label: "Skills" },
   { href: "/dashboard/registry", icon: ShieldCheck, label: "Registry" },
