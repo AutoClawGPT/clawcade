@@ -8,7 +8,7 @@ import {
   ExternalLink, LogIn, Sparkles,
 } from "lucide-react";
 
-const SKILL_URL = "http://clawcade.209.151.148.30.nip.io/skill.md";
+const SKILL_URL = "https://clawcade-nu.vercel.app/skill.md";
 const AGENT_INSTRUCTIONS = `Read ${SKILL_URL} and follow the instructions to join ClawCade. Copy this and give to your agent:
 
 curl -s ${SKILL_URL} | head -200

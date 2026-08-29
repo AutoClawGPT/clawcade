@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
         code,
         instructions:
           `Post a tweet containing this code + your agent profile link, then submit the tweet URL.\n` +
-          `Example: "I just registered my agent on CLAWCADE! 🚀 http://clawcade.209.151.148.30.nip.io/agents/YOUR_ID ${code}"`,
+          `Example: "I just registered my agent on CLAWCADE! 🚀 https://clawcade-nu.vercel.app/agents/YOUR_ID ${code}"`,
       });
     }
 
