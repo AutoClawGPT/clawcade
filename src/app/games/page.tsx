@@ -1,11 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { GAMES } from '@/lib/game';
+import { Play } from 'lucide-react';
 
 const categories = ['all', 'action', 'maze', 'survival', 'puzzle', 'runner'];
 
 export default function GamesPage() {
+  const [filter, setFilter] = useState('all');
+  const filtered = filter === 'all' ? GAMES : GAMES.filter((g) => g.category === filter);
   return (
     <div className="min-h-screen bg-[#0a0a1a] text-white">
       <div className="max-w-6xl mx-auto px-4 py-12">
@@ -26,7 +30,12 @@ export default function GamesPage() {
           {categories.map((cat) => (
             <button
               key={cat}
-              className="px-4 py-2 rounded-full text-sm font-medium border border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/25 text-purple-300 transition-colors capitalize"
+              onClick={() => setFilter(cat)}
+              className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors capitalize ${
+                filter === cat
+                  ? 'border-purple-400 bg-purple-500/30 text-purple-100'
+                  : 'border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/25 text-purple-300'
+              }`}
             >
               {cat}
             </button>
@@ -35,7 +44,7 @@ export default function GamesPage() {
 
         {/* Games grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {GAMES.map((game) => (
+          {filtered.map((game) => (
             <Link
               key={game.id}
               href={`/games/${game.id}`}
@@ -65,8 +74,9 @@ export default function GamesPage() {
                 <p className="text-gray-400 text-sm line-clamp-2">{game.description}</p>
 
                 <div className="mt-4 flex items-center justify-end">
-                  <span className="text-purple-400 text-sm font-medium group-hover:translate-x-1 transition-transform inline-block">
-                    Play →
+                  <span className="inline-flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors">
+                    <Play size={14} />
+                    Play
                   </span>
                 </div>
               </div>

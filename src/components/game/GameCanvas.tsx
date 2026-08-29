@@ -88,6 +88,19 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
     });
   };
 
+  // Mobile touch controls: map on-screen buttons to the engine's key set.
+  // Ref is only accessed on pointer events (not during render), satisfying the
+  // react-hooks/refs rule.
+  const pressKeys = (down: boolean) => (e: React.PointerEvent, keys: string[]) => {
+    e.preventDefault();
+    const inp = engineRef.current?.input;
+    if (!inp) return;
+    if (down) keys.forEach((k) => inp.keys.add(k));
+    else keys.forEach((k) => inp.keys.delete(k));
+  };
+  const keyDown = (keys: string[]) => (e: React.PointerEvent) => pressKeys(true)(e, keys);
+  const keyUp = (keys: string[]) => (e: React.PointerEvent) => pressKeys(false)(e, keys);
+
   useEffect(() => {
     initEngine();
     return () => engineRef.current?.stop();
@@ -184,6 +197,27 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
         <p><strong>Controls:</strong> {game.controls}</p>
         <p><strong>P:</strong> Pause | <strong>R:</strong> Restart</p>
       </div>
+
+      {/* Mobile touch controls */}
+      {state === 'playing' && (
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:hidden select-none touch-none">
+          <div className="grid grid-cols-3 gap-2 justify-items-center">
+            <div />
+            <button onPointerDown={keyDown(['ArrowUp', 'w'])} onPointerUp={keyUp(['ArrowUp', 'w'])} onPointerLeave={keyUp(['ArrowUp', 'w'])} className="w-14 h-14 rounded-lg bg-white/10 border border-white/20 text-white text-xl active:bg-white/30">▲</button>
+            <div />
+            <button onPointerDown={keyDown(['ArrowLeft', 'a'])} onPointerUp={keyUp(['ArrowLeft', 'a'])} onPointerLeave={keyUp(['ArrowLeft', 'a'])} className="w-14 h-14 rounded-lg bg-white/10 border border-white/20 text-white text-xl active:bg-white/30">◀</button>
+            <div className="w-14 h-14" />
+            <button onPointerDown={keyDown(['ArrowRight', 'd'])} onPointerUp={keyUp(['ArrowRight', 'd'])} onPointerLeave={keyUp(['ArrowRight', 'd'])} className="w-14 h-14 rounded-lg bg-white/10 border border-white/20 text-white text-xl active:bg-white/30">▶</button>
+            <div />
+            <button onPointerDown={keyDown(['ArrowDown', 's'])} onPointerUp={keyUp(['ArrowDown', 's'])} onPointerLeave={keyUp(['ArrowDown', 's'])} className="w-14 h-14 rounded-lg bg-white/10 border border-white/20 text-white text-xl active:bg-white/30">▼</button>
+            <div />
+          </div>
+          <div className="flex flex-col items-center justify-center gap-2">
+            <button onPointerDown={keyDown(['z', ' '])} onPointerUp={keyUp(['z', ' '])} onPointerLeave={keyUp(['z', ' '])} className="w-16 h-14 rounded-lg bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88] text-sm font-bold active:bg-[#00FF88]/40">A</button>
+            <button onPointerDown={keyDown(['x', 'Enter'])} onPointerUp={keyUp(['x', 'Enter'])} onPointerLeave={keyUp(['x', 'Enter'])} className="w-16 h-14 rounded-lg bg-[#A855F7]/20 border border-[#A855F7]/40 text-[#A855F7] text-sm font-bold active:bg-[#A855F7]/40">B</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

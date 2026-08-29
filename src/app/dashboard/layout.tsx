@@ -18,6 +18,10 @@ import {
   Swords,
   LogOut,
   Plug,
+  MessageSquare,
+  Rocket,
+  Zap,
+  ShieldCheck,
 } from "lucide-react";
 
 const navItems = [
@@ -26,6 +30,10 @@ const navItems = [
   { href: "/dashboard/leaderboard", icon: Trophy, label: "Leaderboard" },
   { href: "/dashboard/rewards", icon: Gift, label: "Rewards" },
   { href: "/dashboard/agents", icon: Bot, label: "Agents" },
+  { href: "/dashboard/chat", icon: MessageSquare, label: "Chat" },
+  { href: "/dashboard/launch", icon: Rocket, label: "Launch" },
+  { href: "/dashboard/skills", icon: Zap, label: "Skills" },
+  { href: "/dashboard/registry", icon: ShieldCheck, label: "Registry" },
   { href: "/dashboard/duels", icon: Swords, label: "Duels" },
   { href: "/dashboard/wallet", icon: Wallet, label: "Wallet" },
   { href: "/dashboard/analytics", icon: BarChart3, label: "Analytics" },

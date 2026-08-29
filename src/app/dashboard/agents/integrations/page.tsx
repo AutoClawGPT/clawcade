@@ -2,177 +2,203 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plug, Key, Check, ExternalLink, Copy, Shield, Bot } from "lucide-react";
+import { Plug, Key, Check, ExternalLink, Bot, RefreshCw } from "lucide-react";
 
-interface ConnectedKey {
+interface ClawAgent {
+  id: string;
   name: string;
-  connected: boolean;
-  masked: string;
+  status: string;
+  walletAddress: string;
+  skills: string[];
 }
 
 export default function IntegrationsPage() {
-  const [keys, setKeys] = useState<ConnectedKey[]>([]);
+  const [hasKey, setHasKey] = useState(false);
+  const [clawAgents, setClawAgents] = useState<ClawAgent[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = () => {
     const token = localStorage.getItem("authToken");
     if (!token) { setLoading(false); return; }
-    
-    fetch("/api/user/profile", {
+    setLoading(true);
+    fetch("/api/user/settings", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then((data) => {
-        if (data.user) {
-          const connected = data.user.encryptedKeys || {};
-          setKeys([
-            {
-              name: "ClawPump API Key",
-              connected: !!connected.clawpumpApiKey,
-              masked: connected.clawpumpApiKey ? "cpk_****" + connected.clawpumpApiKey.slice(-4) : "Not connected",
-            },
-          ]);
-        }
+        setHasKey(data.hasClawpumpKey || false);
+        setClawAgents(data.clawpump?.agents || []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
   }, []);
 
   const integrations = [
     {
-      name: "ClawPump MCP",
-      description: "122+ MCP tools for AI agents on Solana. Gasless pump.fun launches, swaps, perps, analytics.",
-      url: "https://clawpump.tech/docs",
-      status: "available",
-      features: ["Token Launch", "Swaps", "Perps", "Leaderboard", "Analytics", "Agent Email"],
-      install: "npx @clawpump/agents --claude",
+      name: "ClawPump",
+      description: "Solana agent launchpad — gasless pump.fun tokens, swaps via Jupiter, perps on Phoenix, agent marketplace, 122+ MCP tools.",
+      url: "https://clawpump.tech",
       keyFormat: "cpk_...",
+      features: ["Agent launch", "Swap / Jupiter", "Token create", "PONS launches", "Marketplace"],
+      connected: hasKey,
     },
     {
       name: "Pump.fun",
-      description: "Solana token launchpad. Launch and trade tokens.",
+      description: "Solana token launchpad. Launch and trade tokens (via ClawPump).",
       url: "https://pump.fun",
-      status: "available",
-      features: ["Token Data", "Trading", "Analytics"],
-      install: null,
-      keyFormat: null,
+      features: ["Token data", "Trading", "Analytics"],
+      connected: hasKey,
     },
     {
-      name: "Solana Wallet",
-      description: "Connect your Solana wallet (Phantom, Solflare, Backpack) for token rewards.",
-      url: "https://phantom.app",
-      status: "available",
-      features: ["Wallet Connect", "Token Receive", "SOL Transfer"],
-      install: null,
-      keyFormat: null,
+      name: "PayBox",
+      description: "Non-custodial agent wallet with spending limits and signing.",
+      url: "https://app.paybox.sh",
+      features: ["Wallet", "Spending limits", "Signing"],
+      connected: false,
+    },
+    {
+      name: "MoonPay Agents",
+      description: "Multi-chain non-custodial wallets, fiat on/off-ramp, swaps, DCA.",
+      url: "https://moonpay.com",
+      features: ["Wallets", "Fiat on/off-ramp", "Swaps", "Bridges"],
+      connected: false,
     },
   ];
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-2">Integrations</h1>
-        <p className="text-gray-400">Connect external services to your agents</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-2">Integrations</h1>
+          <p className="text-gray-400">Connect external services to your CLAWCADE account</p>
+        </div>
+        <button
+          onClick={load}
+          className="flex items-center gap-1 text-gray-400 hover:text-white text-sm"
+        >
+          <RefreshCw size={14} />
+          Refresh
+        </button>
       </div>
 
-      {/* Connected Keys */}
-      {!loading && keys.length > 0 && (
-        <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-6 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <Key size={18} className="text-[#00FF88]" />
-            Your Connected Keys
-          </h2>
-          <div className="space-y-3">
-            {keys.map((key) => (
-              <div key={key.name} className="flex items-center justify-between p-3 bg-[#1a1a1a] rounded-lg">
-                <div className="flex items-center gap-3">
-                  {key.connected ? (
-                    <Check size={16} className="text-[#00FF88]" />
-                  ) : (
-                    <Key size={16} className="text-gray-500" />
-                  )}
-                  <div>
-                    <p className="text-sm font-medium text-white">{key.name}</p>
-                    <p className="text-xs text-gray-500 font-mono">{key.masked}</p>
-                  </div>
-                </div>
-                <span className={`text-xs px-2 py-1 rounded ${key.connected ? "bg-[#00FF88]/10 text-[#00FF88]" : "bg-gray-800 text-gray-500"}`}>
-                  {key.connected ? "Connected" : "Not Connected"}
-                </span>
-              </div>
-            ))}
+      <div className="mb-8 bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <Key size={18} className="text-[#00FF88]" />
+          <h3 className="font-semibold text-white">ClawPump API Key</h3>
+          {hasKey && (
+            <span className="text-xs text-[#00FF88] bg-[#00FF88]/10 border border-[#00FF88]/30 px-2 py-0.5 rounded-full">
+              Connected
+            </span>
+          )}
+        </div>
+        <p className="text-gray-400 text-sm mb-3">
+          {hasKey
+            ? "Your own ClawPump key is connected. Your real agents are shown below."
+            : "Connect your own ClawPump cpk_ key in Settings to fetch and manage your real agents."}
+        </p>
+        <a
+          href="/dashboard/settings"
+          className="inline-flex items-center gap-2 bg-[#00FF88] text-black font-semibold px-4 py-2 rounded-lg hover:bg-[#00FF88]/90 transition-colors text-sm"
+        >
+          {hasKey ? "Manage in Settings" : "Connect Key"}
+        </a>
+      </div>
+
+      {hasKey && (
+        <div className="mb-8 bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Bot size={18} className="text-[#A855F7]" />
+            <h3 className="font-semibold text-white">Your ClawPump Agents</h3>
+            <span className="text-xs text-gray-500">({clawAgents.length})</span>
           </div>
-          <p className="text-xs text-gray-500 mt-3">
-            Manage your keys in <a href="/dashboard/settings" className="text-[#00FF88] hover:underline">Settings</a>
-          </p>
+          {loading ? (
+            <p className="text-gray-500 text-sm">Loading your agents...</p>
+          ) : clawAgents.length === 0 ? (
+            <p className="text-gray-500 text-sm">
+              No agents found for your key. Create one at clawpump.tech.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {clawAgents.map((a) => (
+                <div key={a.id} className="border border-[#1f1f1f] rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white text-sm">{a.name}</span>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full ${
+                        a.status === "running" || a.status === "active"
+                          ? "bg-[#00FF88]/10 text-[#00FF88]"
+                          : "bg-gray-500/10 text-gray-400"
+                      }`}
+                    >
+                      {a.status}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-gray-600 font-mono mt-1 truncate">
+                    {a.walletAddress || ""} · {a.id}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Available Integrations */}
-      <div className="space-y-4">
-        {integrations.map((integration, i) => (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {integrations.map((int, i) => (
           <motion.div
-            key={integration.name}
+            key={int.name}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-6"
+            transition={{ delay: i * 0.05 }}
+            className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-5"
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <Plug size={18} className="text-[#00FF88]" />
-                  <h3 className="text-lg font-semibold text-white">{integration.name}</h3>
-                  <span className="text-xs px-2 py-0.5 rounded bg-[#00FF88]/10 text-[#00FF88]">
-                    {integration.status}
-                  </span>
-                </div>
-                <p className="text-gray-400 text-sm mb-3">{integration.description}</p>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {integration.features.map((f) => (
-                    <span key={f} className="text-xs px-2 py-1 rounded bg-[#1a1a1a] text-gray-400">
-                      {f}
-                    </span>
-                  ))}
-                </div>
-                {integration.install && (
-                  <div className="flex items-center gap-2 p-2 bg-black rounded-lg border border-[#1f1f1f]">
-                    <code className="text-xs text-[#00FF88] font-mono flex-1">{integration.install}</code>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(integration.install!)}
-                      className="text-gray-500 hover:text-white"
-                    >
-                      <Copy size={14} />
-                    </button>
-                  </div>
-                )}
-                {integration.keyFormat && (
-                  <p className="text-xs text-gray-500 mt-2">
-                    API Key format: <code className="text-[#A855F7]">{integration.keyFormat}</code>
-                  </p>
-                )}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Plug size={18} className="text-[#00FF88]" />
+                <h3 className="font-semibold text-white">{int.name}</h3>
               </div>
-              <a
-                href={integration.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-500 hover:text-white ml-4"
-              >
-                <ExternalLink size={16} />
-              </a>
+              {int.connected !== undefined &&
+                (int.connected ? (
+                  <span className="flex items-center gap-1 text-xs text-[#00FF88]">
+                    <Check size={14} /> Connected
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500">Available</span>
+                ))}
             </div>
+            <p className="text-gray-400 text-sm mb-4">{int.description}</p>
+            <div className="flex flex-wrap gap-1 mb-4">
+              {int.features.map((f) => (
+                <span key={f} className="text-[10px] text-gray-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">
+                  {f}
+                </span>
+              ))}
+            </div>
+            <a
+              href={int.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm text-[#00FF88] hover:underline"
+            >
+              <ExternalLink size={14} />
+              Open {int.name}
+            </a>
           </motion.div>
         ))}
       </div>
 
-      {/* Agent MCP Info */}
+      {/* Agent MCP Connection */}
       <div className="mt-8 bg-[#0a0a0a] border border-[#A855F7]/20 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
           <Bot size={18} className="text-[#A855F7]" />
           Agent MCP Connection
         </h2>
         <p className="text-gray-400 text-sm mb-4">
-          Any AI agent can connect to CLAWCADE using the skill.md endpoint. 
+          Any AI agent can connect to CLAWCADE using the skill.md endpoint.
           Agents register with Ed25519 keypairs and get unique API tokens.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
