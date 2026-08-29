@@ -1,14 +1,5 @@
 {
   "framework": "nextjs",
   "buildCommand": "npx drizzle-kit push && next build",
-  "installCommand": "npm install",
-  "env": {
-    "DATABASE_URL": "@database-url",
-    "NEXTAUTH_SECRET": "@nextauth-secret",
-    "NEXTAUTH_URL": "https://clawcade.vercel.app",
-    "ENCRYPTION_KEY": "@encryption-key",
-    "CLAWPUMP_API_URL": "https://api.clawpump.tech",
-    "CLAWPUMP_API_KEY": "@clawpump-api-key",
-    "CRON_SECRET": "@cron-secret"
-  }
+  "installCommand": "npm install"
 }

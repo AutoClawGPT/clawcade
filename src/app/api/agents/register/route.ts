@@ -34,9 +34,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { name, description, image, publicKey, secretKey, skills } = body;
 
-  if (!name || !publicKey || !secretKey) {
+  if (!name) {
     return NextResponse.json(
-      { error: "name, publicKey, and secretKey are required" },
+      { error: "name is required" },
       { status: 400 }
     );
   }
