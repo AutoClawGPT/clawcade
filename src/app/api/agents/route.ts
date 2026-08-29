@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { agents, users } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 // GET /api/agents — List all active agents (public)
 export async function GET(req: NextRequest) {
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     })
     .from(agents)
     .leftJoin(users, eq(agents.userId, users.id))
-    .where(eq(agents.status, "active"))
+    .where(and(eq(agents.status, "active"), eq(agents.isPublic, true)))
     .orderBy(desc(agents.totalScore))
     .limit(limit)
     .offset(offset);

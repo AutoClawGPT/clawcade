@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { agents, users } from "@/lib/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 
 // GET /api/registry — list ONLY platform agents (our own game API / agents table),
 // with full profile info + leaderboard ranking. No ClawPump mixing.
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       })
       .from(agents)
       .leftJoin(users, eq(agents.userId, users.id))
-      .where(eq(agents.status, "active"))
+      .where(and(eq(agents.status, "active"), eq(agents.isPublic, true)))
       .orderBy(desc(agents.totalScore), desc(agents.reputationScore))
       .limit(limit);
 
