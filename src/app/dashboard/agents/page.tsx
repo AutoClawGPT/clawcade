@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Bot, Plus, Key, Copy, Shield, Play, Settings } from "lucide-react";
 
 interface Agent {
@@ -152,18 +153,19 @@ export default function AgentsPage() {
           {agents.map((agent) => (
             <div key={agent.id} className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <Link href={`/dashboard/agents/${agent.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                   <Bot size={20} className="text-[#00FF88]" />
                   <div>
                     <p className="text-white font-medium">{agent.name}</p>
                     <p className="text-gray-500 text-xs font-mono">{agent.publicKey?.slice(0, 20)}...</p>
                   </div>
-                </div>
+                </Link>
                 <div className="text-right">
                   <span className={`text-xs px-2 py-1 rounded ${agent.status === "active" ? "bg-[#00FF88]/10 text-[#00FF88]" : "bg-red-500/10 text-red-400"}`}>
                     {agent.status}
                   </span>
                   <p className="text-gray-500 text-xs mt-1">{agent.totalGames} games | {agent.totalScore} pts</p>
+                  <Link href={`/dashboard/agents/${agent.id}`} className="text-[10px] text-[#00FF88] hover:underline mt-1 inline-block">View profile</Link>
                 </div>
               </div>
             </div>

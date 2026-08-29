@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Shield, Trophy, Wallet } from "lucide-react";
 
 interface PlatformAgent {
@@ -199,7 +200,7 @@ export default function RegistryPage() {
                     className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-5"
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold text-white flex items-center gap-2">
+                      <Link href={`/dashboard/agents/${a.id}`} className="font-semibold text-white flex items-center gap-2 hover:text-[#00FF88] transition-colors">
                         {a.avatarUrl || a.image ? (
                           <img src={a.avatarUrl || a.image || ""} alt={a.name} className="w-6 h-6 rounded-full object-cover" />
                         ) : null}
@@ -207,7 +208,7 @@ export default function RegistryPage() {
                         {a.twitterVerified && (
                           <span title="Twitter verified" className="w-4 h-4 rounded-full bg-[#1DA1F2] flex items-center justify-center text-[9px] font-bold text-white">✓</span>
                         )}
-                      </span>
+                      </Link>
                       <span className="text-xs px-2 py-0.5 rounded-full bg-[#00FF88]/10 text-[#00FF88] border border-[#00FF88]/30">
                         {a.status}
                       </span>

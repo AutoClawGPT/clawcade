@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { launchTokenGasless, launchTokenSelfFunded, launchPonsToken, listAgents } from "@/lib/clawpump";
+import { launchTokenGasless, launchTokenSelfFunded, launchPonsToken, listAgents, getPonsLaunches } from "@/lib/clawpump";
 import { getUserFromAuth, getClawpumpKey } from "@/lib/route-auth";
 
 // Serve token images from our own domain so ClawPump's image validation
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
     if (msg.includes("401")) status = 401;
     else if (msg.includes("403")) status = 403;
     else if (msg.includes("404")) status = 404;
-    else if (msg.includes("400")) status = 400;
+    else if (msg.includes("400") || msg.includes("422")) status = 400;
     else if (msg.includes("402") || msg.includes("Payment required")) status = 402;
 
     // Try to parse structured ClawPump error body
@@ -210,5 +210,28 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ type: "launch_failed", error: msg }, { status });
+  }
+}
+
+// GET /api/clawpump/launch?agentId=... — fetch PONS launch history for an agent
+export async function GET(req: NextRequest) {
+  try {
+    const user = await getUserFromAuth(req);
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized. Sign in first." }, { status: 401 });
+    }
+    const agentId = req.nextUrl.searchParams.get("agentId");
+    if (!agentId) {
+      return NextResponse.json({ error: "agentId query parameter is required" }, { status: 400 });
+    }
+    const key = getClawpumpKey(user);
+    if (!key) {
+      return NextResponse.json({ launches: [] });
+    }
+    const result = await getPonsLaunches(agentId, key);
+    return NextResponse.json({ launches: result?.launches || [] });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

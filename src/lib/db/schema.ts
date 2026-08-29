@@ -393,6 +393,19 @@ export const rewardPayments = pgTable(
 );
 
 // ──────────────────────────────────────────────
+// UPLOADED IMAGES (for token launch logos)
+// ──────────────────────────────────────────────
+export const uploadedImages = pgTable(
+  "uploaded_images",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mime: varchar("mime", { length: 64 }).notNull(),
+    data: text("data").notNull(), // base64 of the image bytes
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  }
+);
+
+// ──────────────────────────────────────────────
 // RELATIONS
 // ──────────────────────────────────────────────
 export const usersRelations = relations(users, ({ many }) => ({
