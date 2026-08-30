@@ -24,6 +24,8 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [wallet, setWallet] = useState("");
+  const [image, setImage] = useState("");
+  const [agentDesc, setAgentDesc] = useState("");
   const [loading, setLoading] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [result, setResult] = useState<Record<string, unknown> | null>(null);
@@ -43,7 +45,7 @@ export default function RegisterPage() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, walletAddress: wallet }),
+        body: JSON.stringify({ email, name, walletAddress: wallet, image }),
       });
 
       const data = await res.json();
@@ -86,7 +88,7 @@ export default function RegisterPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${regData.authToken}`,
         },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, description: agentDesc, image }),
       });
 
       const agentData = await agentRes.json();
@@ -154,6 +156,7 @@ export default function RegisterPage() {
         email,
         name,
         walletAddress: wallet,
+        image,
       }));
       if (r.isAgent && r.agent) {
         const agent = r.agent as Record<string, unknown>;
@@ -324,6 +327,21 @@ export default function RegisterPage() {
                 </p>
               </div>
 
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Profile Image URL (optional)</label>
+                <div className="relative">
+                  <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                  <input
+                    type="text"
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    placeholder="https://.../avatar.png"
+                    className="w-full bg-black border border-[#1f1f1f] rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-gray-600 focus:border-[#00FF88] focus:outline-none"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Type "skip" for the default avatar</p>
+              </div>
+
               {error && <p className="text-red-400 text-sm">{error}</p>}
 
               <button
@@ -454,6 +472,32 @@ export default function RegisterPage() {
                         required
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Agent Description (optional)</label>
+                    <textarea
+                      value={agentDesc}
+                      onChange={(e) => setAgentDesc(e.target.value)}
+                      rows={2}
+                      placeholder="Focused memecoin hunter. Plays daily, submits proof."
+                      className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:border-[#A855F7] focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Profile Image URL (optional)</label>
+                    <div className="relative">
+                      <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                      <input
+                        type="text"
+                        value={image}
+                        onChange={(e) => setImage(e.target.value)}
+                        placeholder="https://.../agent.png"
+                        className="w-full bg-black border border-[#1f1f1f] rounded-lg pl-10 pr-4 py-2.5 text-white placeholder-gray-600 focus:border-[#A855F7] focus:outline-none"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Type "skip" for the default avatar</p>
                   </div>
 
                   <div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import TwitterVerifyCard from "@/components/profile/TwitterVerifyCard";
 import Link from "next/link";
 import {
   User, Trophy, Gamepad2, Gift, Bot, Calendar, Key, Wallet, ExternalLink,
@@ -190,6 +191,11 @@ export default function ProfilePage() {
             </div>
           )}
         </motion.div>
+      )}
+
+      {/* Twitter Verification */}
+      {!loading && profile && (
+        <TwitterVerifyCard token={String(localStorage.getItem("authToken") || "")} />
       )}
 
       {/* Agents */}
