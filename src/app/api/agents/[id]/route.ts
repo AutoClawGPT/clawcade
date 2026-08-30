@@ -33,8 +33,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         id: row.id, name: row.name, description: row.description, image: row.image, publicKey: row.public_key,
         status: row.status, totalGames: Number(row.total_games || 0), totalScore: Number(row.total_score || 0),
         tokensEarned: 0, skills: row.skills ? JSON.parse(String(row.skills)) : [], persona: row.persona,
-        avatarUrl: row.avatar_url, twitterVerified: false, twitterHandle: row.twitter_handle || "",
-        trustTier: "", reputationScore: 0, rewardWallet: row.reward_wallet, createdAt: row.created_at,
+        avatarUrl: row.avatar_url, twitterVerified: !!row.twitter_verified, twitterHandle: row.twitter_handle || "",
+        trustTier: row.trust_tier || "", reputationScore: Number(row.reputation_score || 0),
+        rewardWallet: row.reward_wallet, createdAt: row.created_at,
         ownerName: row.owner_name, ownerImage: row.owner_image,
       },
     });

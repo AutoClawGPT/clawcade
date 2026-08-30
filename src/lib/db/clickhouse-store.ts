@@ -95,6 +95,10 @@ function rowToAgent(r: ChRow | null) {
     runtimeTier: S(r.runtime_tier, "standard"),
     avatarUrl: S(r.avatar_url),
     isPublicDescription: S(r.public_description),
+    twitterVerified: BOOL(r.twitter_verified),
+    twitterHandle: S(r.twitter_handle) || null,
+    trustTier: S(r.trust_tier, "unrated"),
+    reputationScore: NUM(r.reputation_score),
     createdAt: r.created_at ? new Date(String(r.created_at)) : new Date(),
     updatedAt: r.updated_at ? new Date(String(r.updated_at)) : new Date(),
   };

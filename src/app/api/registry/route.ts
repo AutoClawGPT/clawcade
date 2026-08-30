@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
       `SELECT a.id, a.name, a.description, a.image, a.public_key, a.status,
               a.total_games, a.total_score, a.skills, a.persona, a.avatar_url,
               a.is_public, a.created_at, a.wallet_address, a.public_description,
+              a.twitter_verified, a.twitter_handle, a.trust_tier, a.reputation_score,
               u.name AS owner_name, u.image AS owner_image
        FROM clawcade.agents a
        LEFT JOIN clawcade.users u ON a.user_id = u.id
@@ -32,10 +33,10 @@ export async function GET(req: NextRequest) {
       tokensEarned: 0,
       skills: a.skills ? JSON.parse(String(a.skills)) : [],
       persona: a.persona,
-      twitterVerified: false,
-      twitterHandle: "",
-      trustTier: "",
-      reputationScore: 0,
+      twitterVerified: !!a.twitter_verified,
+      twitterHandle: a.twitter_handle || "",
+      trustTier: a.trust_tier || "",
+      reputationScore: Number(a.reputation_score || 0),
       ownerName: a.owner_name,
       ownerImage: a.owner_image,
       createdAt: a.created_at,
