@@ -85,7 +85,7 @@ export async function registerAgent(userId: string, data: AgentRegistration) {
     userId,
     name: data.name,
     description: data.description || "",
-    image: data.image || "",
+    image: (data.image && String(data.image).toLowerCase() === "skip") ? "" : (data.image || ""),
     agentToken,
     publicKey: pubKeyStored,
     secretKeyEncrypted,
