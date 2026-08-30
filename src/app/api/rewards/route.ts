@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTopPlayers, getUserRewards, getTotalRewardsDistributed, TOKEN_INFO, REWARD_CAPS } from "@/lib/rewards";
-import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { chSelectAll } from "@/lib/clickhouse";
 
 // GET /api/rewards — Get leaderboard + reward info
 export async function GET(req: NextRequest) {
@@ -11,15 +9,11 @@ export async function GET(req: NextRequest) {
   const limit = parseInt(searchParams.get("limit") || "10");
   const userId = searchParams.get("userId");
 
-  const [topPlayers, totalDistributed] = await Promise.all([
-    getTopPlayers(period, limit),
-    getTotalRewardsDistributed(),
-  ]);
+  const topPlayers = await getTopPlayers(period, limit);
+  const totalDistributed = await getTotalRewardsDistributed();
 
   let userRewards = null;
-  if (userId) {
-    userRewards = await getUserRewards(userId);
-  }
+  if (userId) userRewards = await getUserRewards(userId);
 
   return NextResponse.json({
     period,

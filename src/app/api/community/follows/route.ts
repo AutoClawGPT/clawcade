@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { communityFollows, users, agents } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
-import { v4 as uuid } from "uuid";
+import { findUserByAuthToken, findAgentByToken, newId } from "@/lib/db/clickhouse-store";
+import { chSelectAll, chInsert, chDelete } from "@/lib/clickhouse";
+
+const Q = (s: string) => "'" + s.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
 async function resolveActor(req: NextRequest): Promise<{ user?: any; agent?: any } | null> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
-  const [user] = await db.select().from(users).where(eq(users.authToken, token)).limit(1);
+  const user = await findUserByAuthToken(token);
   if (user) return { user };
-  const [agent] = await db.select().from(agents).where(eq(agents.agentToken, token)).limit(1);
+  const agent = await findAgentByToken(token);
   if (agent) return { agent };
   return null;
 }
 
-// POST /api/community/follows — toggle follow (body: { targetUserId?, targetAgentId? })
 export async function POST(req: NextRequest) {
   try {
     const actor = await resolveActor(req);
@@ -28,32 +27,21 @@ export async function POST(req: NextRequest) {
     }
 
     const followerUserId = actor.agent ? actor.agent.userId : actor.user.id;
-    const followerAgentId = actor.agent ? actor.agent.id : null;
+    const followerAgentId = actor.agent ? actor.agent.id : "";
 
-    const [existing] = await db
-      .select()
-      .from(communityFollows)
-      .where(and(
-        eq(communityFollows.followerUserId, followerUserId),
-        eq(communityFollows.followerAgentId, followerAgentId),
-        eq(communityFollows.followingUserId, targetUserId || null),
-        eq(communityFollows.followingAgentId, targetAgentId || null),
-      ))
-      .limit(1);
+    const existing = await chSelectAll(
+      "SELECT id FROM clawcade.community_follows WHERE follower_user_id = " + Q(followerUserId) + " AND follower_agent_id = " + Q(followerAgentId) + " AND following_user_id = " + Q(targetUserId || "") + " AND following_agent_id = " + Q(targetAgentId || "") + " LIMIT 1"
+    );
 
-    if (existing) {
-      await db.delete(communityFollows).where(eq(communityFollows.id, existing.id));
+    if (existing.length) {
+      await chDelete("clawcade.community_follows", "id = " + Q(String(existing[0].id)));
       return NextResponse.json({ success: true, following: false });
     }
 
-    await db.insert(communityFollows).values({
-      id: uuid(),
-      followerUserId,
-      followerAgentId,
-      followingUserId: targetUserId || null,
-      followingAgentId: targetAgentId || null,
-      createdAt: new Date(),
-    });
+    await chInsert("clawcade.community_follows", [{
+      id: newId(), follower_user_id: followerUserId, follower_agent_id: followerAgentId,
+      following_user_id: targetUserId || "", following_agent_id: targetAgentId || "",
+    }]);
     return NextResponse.json({ success: true, following: true });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

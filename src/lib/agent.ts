@@ -1,45 +1,25 @@
-import { db } from "@/lib/db";
-import { agents, users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { findAgentById, findAgentByToken, findAgentByPublicKey, findAgentByName, findUserById, listUserAgents, createAgent, updateAgentRows } from "@/lib/db/clickhouse-store";
 import { generateApiKey, encryptKey, decryptKey } from "@/lib/crypto";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
-import { v4 as uuid } from "uuid";
+import { newId } from "@/lib/db/clickhouse-store";
 
 function toBytes(input: string): Uint8Array {
   const trimmed = input.trim();
   if (!trimmed) throw new Error("Empty key provided");
-
-  // Reject EVM / 0x-prefixed addresses — they are NOT Ed25519 keys.
   if (/^0x/i.test(trimmed)) {
-    throw new Error(
-      "Invalid key format: 0x-prefixed EVM addresses are not Ed25519 keys. " +
-      "publicKey must be a base58 or hex-encoded Ed25519 key."
-    );
+    throw new Error("Invalid key format: 0x-prefixed EVM addresses are not Ed25519 keys. publicKey must be a base58 or hex-encoded Ed25519 key.");
   }
-
-  // Try base58 first (standard Solana/Ed25519 encoding)
   try {
     const decoded = bs58.decode(trimmed);
     if (decoded.length === 32 || decoded.length === 64) return decoded;
   } catch {}
-
-  // Try plain hex (64 or 128 chars, no 0x prefix)
   if (/^[0-9a-fA-F]{64}$/.test(trimmed) || /^[0-9a-fA-F]{128}$/.test(trimmed)) {
     return new Uint8Array(Buffer.from(trimmed, "hex"));
   }
-
-  throw new Error(
-    "Invalid key format: provide a base58-encoded Ed25519 key or a plain hex string (64 or 128 chars). " +
-    "EVM/0x addresses are not accepted."
-  );
+  throw new Error("Invalid key format: provide a base58-encoded Ed25519 key or a plain hex string (64 or 128 chars). EVM/0x addresses are not accepted.");
 }
 
-
-/**
- * Validate a Solana wallet address (base58, 32-byte public key).
- * Used for reward wallets where rewards land. Rejects 0x EVM addresses.
- */
 export function isValidSolanaWallet(wallet: string): boolean {
   if (!wallet) return false;
   const trimmed = wallet.trim();
@@ -67,29 +47,23 @@ export interface AgentRegistration {
   claimMethod?: string;
 }
 
-export async function registerAgent(
-  userId: string,
-  data: AgentRegistration
-) {
+export async function registerAgent(userId: string, data: AgentRegistration) {
   let secretKeyB58 = data.secretKey || "";
   let publicKeyB58 = data.publicKey || "";
 
-  // Auto-generate keypair if not provided
   if (!secretKeyB58) {
     const kp = nacl.sign.keyPair();
     secretKeyB58 = bs58.encode(kp.secretKey);
     publicKeyB58 = bs58.encode(kp.publicKey);
   }
 
-  // Convert to bytes (supports hex or base58)
   const secretKeyBytes = toBytes(secretKeyB58);
   const publicKeyBytes = data.publicKey ? toBytes(data.publicKey) : secretKeyBytes.slice(32, 64);
-  
+
   if (secretKeyBytes.length !== 64) {
     throw new Error("Invalid secret key length");
   }
-  
-  // Derive public key from secret key to verify
+
   const derivedPublic = secretKeyBytes.slice(32, 64);
   if (data.publicKey) {
     if (Buffer.compare(Buffer.from(derivedPublic), Buffer.from(publicKeyBytes)) !== 0) {
@@ -97,84 +71,56 @@ export async function registerAgent(
     }
   }
 
-  // Always use base58 for storage
   const pubKeyStored = data.publicKey ? publicKeyB58 : bs58.encode(derivedPublic);
 
-  // Validate reward wallet if provided (SOL, never 0x EVM)
   if (data.rewardWallet && !isValidSolanaWallet(data.rewardWallet)) {
-    throw new Error(
-      "Invalid rewardWallet: provide a Solana address (base58, 32-byte). EVM/0x addresses are not accepted."
-    );
+    throw new Error("Invalid rewardWallet: provide a Solana address (base58, 32-byte). EVM/0x addresses are not accepted.");
   }
 
-  // Generate unique agent token
-  const agentToken = `agent_${uuid().replace(/-/g, "")}`;
-  
-  // Encrypt secret key for storage
+  const agentToken = "agent_" + newId().replace(/-/g, "");
   const secretKeyEncrypted = encryptKey(secretKeyB58);
-  
-  // Create agent
-  const [agent] = await db.insert(agents).values({
-    id: uuid(),
+
+  const agent = await createAgent({
+    id: newId(),
     userId,
     name: data.name,
-    description: data.description || null,
-    image: data.image || null,
+    description: data.description || "",
+    image: data.image || "",
     agentToken,
     publicKey: pubKeyStored,
     secretKeyEncrypted,
     status: "active",
+    skills: data.skills || [],
+    clawpumpAgentId: data.clawpumpAgentId || "",
+    clawpumpWalletAddress: data.clawpumpWalletAddress || "",
+    persona: data.persona || "",
+    avatarUrl: data.avatarUrl || "",
+    rewardWallet: data.rewardWallet ? data.rewardWallet.trim() : "",
+    claimMethod: data.claimMethod || "manual",
     totalGames: 0,
     totalScore: 0,
-    tokensEarned: 0,
-    skills: data.skills || [],
-    clawpumpAgentId: data.clawpumpAgentId || null,
-    clawpumpWalletAddress: data.clawpumpWalletAddress || null,
-    persona: data.persona || null,
-    avatarUrl: data.avatarUrl || null,
-    rewardWallet: data.rewardWallet ? data.rewardWallet.trim() : null,
-    claimMethod: data.claimMethod || "manual",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }).returning();
+  });
 
   return {
-    agentId: agent.id,
+    agentId: agent?.id || "",
     agentToken,
     publicKey: pubKeyStored,
-    name: agent.name,
+    name: agent?.name || data.name,
   };
 }
 
 export async function verifyAgentToken(agentToken: string) {
-  const [agent] = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.agentToken, agentToken))
-    .limit(1);
-  
-  if (!agent || agent.status !== "active") {
-    return null;
-  }
-  
+  const agent = await findAgentByToken(agentToken);
+  if (!agent || agent.status !== "active") return null;
   return agent;
 }
 
 export async function getAgentByPublicKey(publicKey: string) {
-  const [agent] = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.publicKey, publicKey))
-    .limit(1);
-  
-  return agent || null;
+  return await findAgentByPublicKey(publicKey);
 }
 
 export async function getUserAgents(userId: string) {
-  return db
-    .select()
-    .from(agents)
-    .where(eq(agents.userId, userId));
+  return await listUserAgents(userId);
 }
 
 export async function updateAgent(
@@ -192,13 +138,8 @@ export async function updateAgent(
     twitterHandle: string | null;
   }>
 ) {
-  const [agent] = await db
-    .update(agents)
-    .set({ ...updates, updatedAt: new Date() })
-    .where(eq(agents.id, agentId))
-    .returning();
-  
-  return agent;
+  if (Object.keys(updates).length) await updateAgentRows(agentId, updates as Record<string, any>);
+  return (await findAgentById(agentId))!;
 }
 
 export function signMessage(message: string, secretKey: string): string {
@@ -208,11 +149,7 @@ export function signMessage(message: string, secretKey: string): string {
   return bs58.encode(signature);
 }
 
-export function verifySignature(
-  message: string,
-  signature: string,
-  publicKey: string
-): boolean {
+export function verifySignature(message: string, signature: string, publicKey: string): boolean {
   try {
     const messageBytes = new TextEncoder().encode(message);
     const signatureBytes = bs58.decode(signature);
@@ -222,3 +159,5 @@ export function verifySignature(
     return false;
   }
 }
+
+export { decryptKey };

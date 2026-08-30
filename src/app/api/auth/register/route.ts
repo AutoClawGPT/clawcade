@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { v4 as uuid } from "uuid";
+import { findUserByEmail, createUser, newId } from "@/lib/db/clickhouse-store";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
@@ -15,15 +12,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Check if email exists
-  const [existing] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, email))
-    .limit(1);
-
+  const existing = await findUserByEmail(email);
   if (existing) {
-    // Return existing user's auth token
     return NextResponse.json({
       userId: existing.id,
       authToken: existing.authToken,
@@ -31,37 +21,28 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Generate unique auth token
-  const authToken = `auth_${uuid().replace(/-/g, "")}`;
-
-  const [user] = await db.insert(users).values({
-    id: uuid(),
+  const authToken = "auth_" + newId().replace(/-/g, "");
+  const user = await createUser({
+    id: newId(),
     email,
     name,
-    image: image || null,
-    walletAddress: walletAddress || null,
-    publicKey: null,
+    image: image || "",
+    walletAddress: walletAddress || "",
+    publicKey: "",
     authToken,
     role: "user",
     level: 1,
     xp: 0,
     totalScore: 0,
     totalGames: 0,
-    wins: 0,
-    losses: 0,
-    winStreak: 0,
-    bestStreak: 0,
-    tokensEarned: 0,
     encryptedKeys: {},
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }).returning();
+  });
 
   return NextResponse.json({
-    userId: user.id,
-    authToken: user.authToken,
-    email: user.email,
-    name: user.name,
+    userId: user?.id || "",
+    authToken: user?.authToken || authToken,
+    email: user?.email || email,
+    name: user?.name || name,
     message: "Registration successful! Save your authToken securely — it's your API key.",
     warning: "Your authToken is shown only once. Store it safely.",
   });

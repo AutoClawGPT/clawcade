@@ -1,65 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { users, agents, rewards, scores } from "@/lib/db/schema";
-import { eq, desc, sql } from "drizzle-orm";
-import { encryptKey, decryptKey } from "@/lib/crypto";
+import { findUserByAuthToken, listUserAgents, newId } from "@/lib/db/clickhouse-store";
+import { chSelectFirst, chSelectAll } from "@/lib/clickhouse";
+import { decryptKey } from "@/lib/crypto";
 import { listAgents } from "@/lib/clawpump";
 
-async function getUserFromAuth(authHeader: string | null) {
-  if (!authHeader?.startsWith("Bearer ")) return null;
-  const token = authHeader.slice(7);
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.authToken, token))
-    .limit(1);
-  return user || null;
-}
+const Q = (s: string) => "'" + s.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
-// Postgres sum()/count() return strings — coerce to numbers
 function toNum(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 }
 
-// GET /api/user/profile
 export async function GET(req: NextRequest) {
-  const user = await getUserFromAuth(req.headers.get("authorization"));
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const user = await findUserByAuthToken(authHeader.slice(7));
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Get user's agents
-  const userAgents = await db
-    .select()
-    .from(agents)
-    .where(eq(agents.userId, user.id));
+  const userAgents = await listUserAgents(user.id);
 
-  // Get user's recent rewards
-  const recentRewards = await db
-    .select()
-    .from(rewards)
-    .where(eq(rewards.userId, user.id))
-    .orderBy(desc(rewards.createdAt))
-    .limit(10);
+  const recentRewards = await chSelectAll(
+    "SELECT * FROM clawcade.rewards WHERE user_id = " + Q(user.id) + " ORDER BY created_at DESC LIMIT 10"
+  );
 
-  // Get user's total score (sum/count come back as strings from PG)
-  const [stats] = await db
-    .select({
-      totalScore: sql<number>`coalesce(sum(${scores.score}), 0)`,
-      gamesPlayed: sql<number>`count(*)`,
-    })
-    .from(scores)
-    .where(eq(scores.userId, user.id));
+  const statsRow = await chSelectFirst(
+    "SELECT coalesce(sum(score), 0) AS ts, count() AS gp FROM clawcade.scores WHERE user_id = " + Q(user.id)
+  );
 
-  // Check if user has connected a ClawPump key
-  const encryptedKeys = (user.encryptedKeys as Record<string, string>) || {};
+  const encryptedKeys = user.encryptedKeys || {};
   const hasClawpumpKey = !!encryptedKeys.clawpumpApiKey;
-
-  let clawpumpStatus: { hasKey: boolean; agents: number; error?: string } = {
-    hasKey: hasClawpumpKey,
-    agents: 0,
-  };
+  let clawpumpStatus: { hasKey: boolean; agents: number; error?: string } = { hasKey: hasClawpumpKey, agents: 0 };
   if (hasClawpumpKey) {
     try {
       const key = decryptKey(encryptedKeys.clawpumpApiKey);
@@ -71,48 +43,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const totalScore = toNum(stats?.totalScore);
-  const totalGames = toNum(stats?.gamesPlayed);
+  const totalScore = toNum(statsRow?.ts);
+  const totalGames = toNum(statsRow?.gp);
 
   return NextResponse.json({
     user: {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      image: user.image,
-      walletAddress: user.walletAddress,
-      role: user.role,
-      level: user.level,
-      xp: user.xp,
-      totalScore,
-      totalGames,
-      tokensEarned: user.tokensEarned,
-      rewardWallet: user.rewardWallet,
-      claimMethod: user.claimMethod,
-      createdAt: user.createdAt,
+      id: user.id, email: user.email, name: user.name, image: user.image,
+      walletAddress: user.walletAddress, role: user.role, level: user.level, xp: user.xp,
+      totalScore, totalGames, tokensEarned: user.tokensEarned,
+      rewardWallet: user.rewardWallet, claimMethod: user.claimMethod, createdAt: user.createdAt,
     },
-    agents: userAgents.map((a) => ({
-      id: a.id,
-      name: a.name,
-      description: a.description,
-      publicKey: a.publicKey,
-      agentToken: a.agentToken,
-      status: a.status,
-      totalGames: a.totalGames,
-      totalScore: a.totalScore,
-      tokensEarned: a.tokensEarned,
-      skills: a.skills,
-      avatarUrl: a.avatarUrl,
-      image: a.image,
-      trustTier: a.trustTier,
-      reputationScore: a.reputationScore,
-      twitterVerified: a.twitterVerified,
-      twitterHandle: a.twitterHandle,
-      clawpumpAgentId: a.clawpumpAgentId,
-      rewardWallet: a.rewardWallet,
-      claimMethod: a.claimMethod,
-      description: a.description,
-      avatarUrl: a.avatarUrl,
+    agents: userAgents.map((a: any) => ({
+      id: a.id, name: a.name, description: a.description, publicKey: a.publicKey,
+      agentToken: a.agentToken, status: a.status, totalGames: a.totalGames, totalScore: a.totalScore,
+      tokensEarned: 0, skills: a.skills, avatarUrl: a.avatarUrl, image: a.image,
+      trustTier: a.trustTier, reputationScore: a.reputationScore, twitterVerified: a.twitterVerified,
+      twitterHandle: a.twitterHandle, clawpumpAgentId: a.clawpumpAgentId, rewardWallet: a.rewardWallet, claimMethod: a.claimMethod,
     })),
     recentRewards,
     clawpump: clawpumpStatus,

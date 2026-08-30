@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { bounties, users, agentReputation } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
-import { getUserFromAuth, getActorFromAuth } from "@/lib/route-auth";
+import { chSelectAll, chUpdate } from "@/lib/clickhouse";
+import { getActorFromAuth } from "@/lib/route-auth";
+
+const Q = (s: string) => "'" + s.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
 // GET /api/bounties/:id — get one bounty
-export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
+export async function GET(_req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
-    const [bounty] = await db.select().from(bounties).where(eq(bounties.id, id)).limit(1);
-    if (!bounty) {
-      return NextResponse.json({ error: "Bounty not found" }, { status: 404 });
-    }
-    return NextResponse.json({ bounty });
+    const rows = await chSelectAll("SELECT * FROM clawcade.bounties WHERE id = " + Q(id) + " LIMIT 1");
+    if (!rows.length) return NextResponse.json({ error: "Bounty not found" }, { status: 404 });
+    return NextResponse.json({ bounty: rows[0] });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -20,73 +18,52 @@ export async function GET(req: NextRequest, ctx: { params: { id: string } }) {
 }
 
 // POST /api/bounties/:id — claim | complete | dispute (humans AND agents via Bearer)
-export async function POST(req: NextRequest, ctx: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const actor = await getActorFromAuth(req);
-    if (!actor) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { id } = await ctx.params;
     const body = await req.json();
     const { action, proofUrl } = body;
 
-    const [bounty] = await db.select().from(bounties).where(eq(bounties.id, id)).limit(1);
-    if (!bounty) {
-      return NextResponse.json({ error: "Bounty not found" }, { status: 404 });
-    }
+    const rows = await chSelectAll("SELECT * FROM clawcade.bounties WHERE id = " + Q(id) + " LIMIT 1");
+    if (!rows.length) return NextResponse.json({ error: "Bounty not found" }, { status: 404 });
+    const bounty = rows[0];
+    const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
     if (action === "claim") {
-      if (bounty.status !== "open") {
-        return NextResponse.json({ error: "Bounty is not open" }, { status: 400 });
-      }
-      await db
-        .update(bounties)
-        .set({ status: "in_progress", assigneeUserId: actor.userId, updatedAt: new Date() })
-        .where(eq(bounties.id, id));
+      if (bounty.status !== "open") return NextResponse.json({ error: "Bounty is not open" }, { status: 400 });
+      await chUpdate("clawcade.bounties", { status: "in_progress", assignee_user_id: actor.userId }, "id = " + Q(id));
       return NextResponse.json({ success: true, message: "Bounty claimed!" });
     }
 
     if (action === "complete") {
-      if (bounty.assigneeUserId !== actor.userId) {
+      if (bounty.assignee_user_id !== actor.userId) {
         return NextResponse.json({ error: "Only the assignee can complete this bounty" }, { status: 403 });
       }
-      if (!proofUrl) {
-        return NextResponse.json({ error: "proofUrl is required to complete" }, { status: 400 });
-      }
-      await db
-        .update(bounties)
-        .set({ status: "completed", proofUrl, updatedAt: new Date() })
-        .where(eq(bounties.id, id));
+      if (!proofUrl) return NextResponse.json({ error: "proofUrl is required to complete" }, { status: 400 });
+      await chUpdate("clawcade.bounties", { status: "completed", proof_url: proofUrl }, "id = " + Q(id));
 
-      // +25 rep for the actor (agent reps are keyed on owner user id; also bump agentReputation row)
-      const [rep] = await db
-        .select()
-        .from(agentReputation)
-        .where(eq(agentReputation.userId, actor.userId))
-        .limit(1);
-      if (rep) {
-        await db
-          .update(agentReputation)
-          .set({
-            completedBounties: (rep.completedBounties || 0) + 1,
-            totalBounties: (rep.totalBounties || 0) + 1,
-            reputationScore: (rep.reputationScore || 0) + 25,
-            updatedAt: new Date(),
-          })
-          .where(eq(agentReputation.id, rep.id));
+      const repRows = await chSelectAll("SELECT * FROM clawcade.agent_reputation WHERE user_id = " + Q(actor.userId) + " LIMIT 1");
+      if (repRows.length) {
+        const rep = repRows[0];
+        const completed = Number(rep.completed_bounties || 0) + 1;
+        const total = Number(rep.total_bounties || 0) + 1;
+        const score = Number(rep.reputation_score || 0) + 25;
+        const tier = score >= 1000 ? "platinum" : score >= 500 ? "gold" : score >= 100 ? "silver" : score >= 10 ? "bronze" : "unrated";
+        await chUpdate("clawcade.agent_reputation",
+          { completed_bounties: completed, total_bounties: total, reputation_score: score, trust_tier: tier },
+          "id = " + Q(String(rep.id)));
       }
 
       return NextResponse.json({ success: true, message: "Bounty completed!" });
     }
 
     if (action === "dispute") {
-      if (bounty.creatorUserId !== actor.userId && bounty.assigneeUserId !== actor.userId) {
+      if (bounty.creator_user_id !== actor.userId && bounty.assignee_user_id !== actor.userId) {
         return NextResponse.json({ error: "Not authorized to dispute" }, { status: 403 });
       }
-      await db
-        .update(bounties)
-        .set({ status: "disputed", updatedAt: new Date() })
-        .where(eq(bounties.id, id));
+      await chUpdate("clawcade.bounties", { status: "disputed" }, "id = " + Q(id));
       return NextResponse.json({ success: true, message: "Bounty disputed" });
     }
 

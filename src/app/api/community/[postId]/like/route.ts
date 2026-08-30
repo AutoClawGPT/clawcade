@@ -1,54 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { communityLikes, communityPosts, users, agents } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
-import { v4 as uuid } from "uuid";
+import { findUserByAuthToken, findAgentByToken, newId } from "@/lib/db/clickhouse-store";
+import { chSelectAll, chInsert, chDelete, chExec } from "@/lib/clickhouse";
+
+const Q = (s: string) => "'" + s.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
 async function resolveActor(req: NextRequest): Promise<{ user?: any; agent?: any } | null> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
-  const [user] = await db.select().from(users).where(eq(users.authToken, token)).limit(1);
+  const user = await findUserByAuthToken(token);
   if (user) return { user };
-  const [agent] = await db.select().from(agents).where(eq(agents.agentToken, token)).limit(1);
+  const agent = await findAgentByToken(token);
   if (agent) return { agent };
   return null;
 }
 
-// POST /api/community/:postId/like — toggle like
-export async function POST(req: NextRequest, ctx: { params: { postId: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ postId: string }> }) {
   try {
     const { postId } = await ctx.params;
     const actor = await resolveActor(req);
     if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const [post] = await db.select().from(communityPosts).where(eq(communityPosts.id, postId)).limit(1);
-    if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+    const posts = await chSelectAll("SELECT likes FROM clawcade.community_posts WHERE id = " + Q(postId) + " LIMIT 1");
+    if (!posts.length) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+    const postLikes = Number(posts[0].likes || 0);
 
     const userId = actor.agent ? actor.agent.userId : actor.user.id;
-    const agentId = actor.agent ? actor.agent.id : null;
+    const agentId = actor.agent ? actor.agent.id : "";
 
-    const [existing] = await db
-      .select()
-      .from(communityLikes)
-      .where(and(eq(communityLikes.postId, postId), eq(communityLikes.agentId, agentId)))
-      .limit(1);
-    const [existingUser] = await db
-      .select()
-      .from(communityLikes)
-      .where(and(eq(communityLikes.postId, postId), eq(communityLikes.userId, userId), eq(communityLikes.agentId, null)))
-      .limit(1);
+    const existing = await chSelectAll(
+      "SELECT id FROM clawcade.community_likes WHERE post_id = " + Q(postId) + " AND user_id = " + Q(userId) + " AND agent_id = " + Q(agentId) + " LIMIT 1"
+    );
 
-    const like = existing || existingUser;
-    if (like) {
-      await db.delete(communityLikes).where(eq(communityLikes.id, like.id));
-      await db.update(communityPosts).set({ likes: Math.max(0, (post.likes || 0) - 1) }).where(eq(communityPosts.id, postId));
-      return NextResponse.json({ success: true, liked: false, likes: Math.max(0, (post.likes || 0) - 1) });
+    if (existing.length) {
+      await chDelete("clawcade.community_likes", "id = " + Q(String(existing[0].id)));
+      await chExec("ALTER TABLE clawcade.community_posts UPDATE likes = greatest(0, likes - 1) WHERE id = " + Q(postId) + " SETTINGS mutations_sync = 1", { timeoutMs: 15000 });
+      return NextResponse.json({ success: true, liked: false, likes: Math.max(0, postLikes - 1) });
     }
 
-    await db.insert(communityLikes).values({ id: uuid(), postId, userId, agentId, createdAt: new Date() });
-    await db.update(communityPosts).set({ likes: (post.likes || 0) + 1 }).where(eq(communityPosts.id, postId));
-    return NextResponse.json({ success: true, liked: true, likes: (post.likes || 0) + 1 });
+    await chInsert("clawcade.community_likes", [{ id: newId(), post_id: postId, user_id: userId, agent_id: agentId }]);
+    await chExec("ALTER TABLE clawcade.community_posts UPDATE likes = likes + 1 WHERE id = " + Q(postId) + " SETTINGS mutations_sync = 1", { timeoutMs: 15000 });
+    return NextResponse.json({ success: true, liked: true, likes: postLikes + 1 });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: msg }, { status: 500 });

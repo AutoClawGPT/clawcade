@@ -1,22 +1,11 @@
-import { db } from "@/lib/db";
-import { users, agents, scores, rewards, platformConfig, communityPosts } from "@/lib/db/schema";
-import { eq, desc, sql, gte, and } from "drizzle-orm";
-import { v4 as uuid } from "uuid";
-import nacl from "tweetnacl";
-import bs58 from "bs58";
+import { findAgentByName, findAgentById, newId } from "@/lib/db/clickhouse-store";
+import { chSelectAll, chInsert } from "@/lib/clickhouse";
 import { enrollPlatformAgents } from "./platform-agents";
 import { clampReward } from "./rewards";
 import { clickhouseInsert } from "./clickhouse";
 
-/**
- * Runs the full on-platform reward pipeline for a given period ("hourly" | "daily" | "weekly").
- *
- * 1. Ensures TREASURY + DISTRIBUTOR platform agents exist.
- * 2. DISTRIBUTOR computes the top scores for players/agents that provided a reward claim wallet.
- * 3. TREASURY "holds" the token (a ledger rows in rewards + platform_config) and
- *    splits prizes only to agents/players that have a claim wallet set.
- * 4. Creates a community post announcing the drop.
- */
+const Q = (s: string) => "'" + s.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+
 export async function runDistribution(
   period: "hourly" | "daily" | "weekly"
 ): Promise<{ distributed: number; results: unknown[]; period: string }> {
@@ -28,136 +17,76 @@ export async function runDistribution(
   if (period === "hourly") since = new Date(now.getTime() - 3600_000);
   else if (period === "daily") since = new Date(now.getTime() - 86400_000);
   else since = new Date(now.getTime() - 7 * 86400_000);
+  const sinceStr = since.toISOString().slice(0, 19).replace("T", " ");
 
-  // Only distribute to actors that provided a reward claim wallet.
-  // Agents with a rewardWallet qualify; humans with rewardWallet qualify.
-  const agentWinners = await db
-    .select({
-      id: agents.id,
-      name: agents.name,
-      rewardWallet: agents.rewardWallet,
-    })
-    .from(agents)
-    .where(sql`${agents.rewardWallet} is not null and trim(${agents.rewardWallet}) <> ''`)
-    .limit(200);
+  const agentWinners = await chSelectAll(
+    "SELECT id, name, reward_wallet AS wallet FROM clawcade.agents WHERE reward_wallet IS NOT NULL AND trim(reward_wallet) <> '' LIMIT 200"
+  );
+  const userWinners = await chSelectAll(
+    "SELECT id, name, reward_wallet AS wallet FROM clawcade.users WHERE reward_wallet IS NOT NULL AND trim(reward_wallet) <> '' LIMIT 200"
+  );
 
-  const userWinners = await db
-    .select({
-      id: users.id,
-      name: users.name,
-      wallet: users.rewardWallet,
-    })
-    .from(users)
-    .where(sql`coalesce(${users.rewardWallet}, '') <> ''`)
-    .limit(200);
-
-  // Compute per-winner scores for the period with a single aggregated query each.
   const agentRows = agentWinners.length
-    ? await db
-        .select({
-          agentId: scores.agentId,
-          totalScore: sql<number>`coalesce(sum(${scores.score}),0)`.as("s"),
-        })
-        .from(scores)
-        .where(and(gte(scores.createdAt, since), sql`${scores.agentId} is not null`))
-        .groupBy(scores.agentId)
+    ? await chSelectAll(
+        "SELECT agent_id AS id, coalesce(sum(score),0) AS s FROM clawcade.scores WHERE created_at >= '" + sinceStr + "' AND agent_id <> '' GROUP BY agent_id"
+      )
     : [];
-  const agentScoreMap = new Map(agentRows.map((r) => [r.agentId, Number(r.totalScore) || 0]));
+  const agentScoreMap = new Map(agentRows.map((r) => [String(r.id), Number(r.s) || 0]));
 
   const userRows = userWinners.length
-    ? await db
-        .select({
-          userId: scores.userId,
-          totalScore: sql<number>`coalesce(sum(${scores.score}),0)`.as("s"),
-        })
-        .from(scores)
-        .where(and(gte(scores.createdAt, since), sql`${scores.agentId} is null`))
-        .groupBy(scores.userId)
+    ? await chSelectAll(
+        "SELECT user_id AS id, coalesce(sum(score),0) AS s FROM clawcade.scores WHERE created_at >= '" + sinceStr + "' AND agent_id = '' GROUP BY user_id"
+      )
     : [];
-  const userScoreMap = new Map(userRows.map((r) => [r.userId, Number(r.totalScore) || 0]));
+  const userScoreMap = new Map(userRows.map((r) => [String(r.id), Number(r.s) || 0]));
 
-  // Merge and rank (weekly includes all active with a wallet)
   const combined = [
-    ...agentWinners.map((a) => ({ key: `agent:${a.id}`, actor: "agent", id: a.id, name: a.name, wallet: a.rewardWallet, score: agentScoreMap.get(a.id) || 0 })),
-    ...userWinners.map((u) => ({ key: `user:${u.id}`, actor: "user", id: u.id, name: u.name, wallet: u.wallet, score: userScoreMap.get(u.id) || 0 })),
-  ]
-    .filter((x) => x.wallet)
-    .sort((a, b) => b.score - a.score);
+    ...agentWinners.map((a: any) => ({ key: "agent:" + a.id, actor: "agent", id: String(a.id), name: a.name, wallet: a.wallet, score: agentScoreMap.get(String(a.id)) || 0 })),
+    ...userWinners.map((u: any) => ({ key: "user:" + u.id, actor: "user", id: String(u.id), name: u.name, wallet: u.wallet, score: userScoreMap.get(String(u.id)) || 0 })),
+  ].filter((x) => x.wallet).sort((a, b) => b.score - a.score);
 
-  // Amounts per rank (capped)
   const tiers = period === "hourly" ? [100, 50, 25] : period === "daily" ? [100, 80, 60, 40, 20, 10, 10, 10, 5, 5] : [100, 80, 60, 50, 40, 30, 20, 20, 10, 10];
 
-  const results = [];
+  const results: any[] = [];
   const top = combined.slice(0, tiers.length);
+  const nowIso = now.toISOString();
   for (let i = 0; i < top.length; i++) {
     const w = top[i];
     const amount = clampReward(tiers[i], token);
-    const periodKey = `${period}_${now.toISOString().slice(0, period === "hourly" ? 13 : 10)}`;
-
-    // Record on the treasury ledger
-    await db.insert(rewards).values({
-      id: uuid(),
-      userId: w.actor === "user" ? w.id : (await actorOwnerId(w.id)),
-      agentId: w.actor === "agent" ? w.id : null,
-      type: period,
-      amount,
-      token,
-      status: "pending",
-      rank: i + 1,
-      period: periodKey,
-      createdAt: now,
-    });
-
-    // Treasury ledger balance summary
+    const periodKey = period + "_" + nowIso.slice(0, period === "hourly" ? 13 : 10);
+    const ownerId = w.actor === "user" ? w.id : await actorOwnerId(w.id);
+    await chInsert("clawcade.rewards", [{
+      id: newId(), user_id: ownerId || "", agent_id: w.actor === "agent" ? w.id : "",
+      type: period, amount, token, status: "pending", rank: i + 1, period: periodKey,
+      created_at: nowIso.slice(0, 19).replace("T", " "),
+    }]);
     await upsertTreasury(token, amount);
-
-    // Best-effort analytics event (ClickHouse Cloud)
-    void clickhouseInsert(
-      "clawcade.reward_events",
-      ["actor_type", "actor_id", "token", "amount", "reward_type"],
-      [[w.actor, w.id, token, amount, period]]
-    );
-
+    void clickhouseInsert("clawcade.reward_events", ["actor_type", "actor_id", "token", "amount", "reward_type"], [[w.actor, w.id, token, amount, period]]);
     results.push({ rank: i + 1, actor: w.actor, name: w.name, wallet: w.wallet, amount, token });
   }
 
-  // Community announcement post by the DISTRIBUTOR platform agent
-  const distributor = await db
-    .select()
-    .from(agents)
-    .where(sql`${agents.name} = 'DISTRIBUTOR'`)
-    .limit(1);
-
-  if (distributor.length && results.length) {
+  const distributor = await findAgentByName("DISTRIBUTOR");
+  if (distributor && results.length) {
     const topLine = results.slice(0, 3).map((r) => `${r.name} (${r.amount} ${r.token})`).join(", ");
-    await db.insert(communityPosts).values({
-      id: uuid(),
-      userId: distributor[0].userId,
-      agentId: distributor[0].id,
+    await chInsert("clawcade.community_posts", [{
+      id: newId(), user_id: distributor.userId, agent_id: distributor.id,
       content: `${period.toUpperCase()} drop complete: ${results.length} winners. Top: ${topLine}. Rewards land to the claim SOL wallet each winner provided. Rewards are capped to protect the treasury.`,
-      kind: period,
-      createdAt: now,
-    });
+      kind: period, score: 0, game_slug: "", ref_id: "", comments: 0, likes: 0,
+    }]);
   }
 
   return { distributed: results.length, results, period };
 }
 
-// Resolve the owner user id for an agent (rewards.userId is NOT NULL).
 async function actorOwnerId(agentId: string): Promise<string | null> {
-  const [agent] = await db.select({ userId: agents.userId }).from(agents).where(eq(agents.id, agentId)).limit(1);
+  const agent = await findAgentById(agentId);
   return agent?.userId || null;
 }
 
-// Track treasury totals in platform_config
 async function upsertTreasury(token: string, amountDelta: number) {
-  const key = `treasury_balance_${token.toLowerCase()}`;
-  const [row] = await db.select().from(platformConfig).where(eq(platformConfig.key, key)).limit(1);
-  const prev = row && row.value ? Number(row.value) : 0;
+  const { getPlatformConfig, upsertPlatformConfig } = await import("@/lib/db/clickhouse-store");
+  const key = "treasury_" + token.toLowerCase();
+  const prev = Number(await getPlatformConfig(key)) || 0;
   const next = Math.round((prev + amountDelta) * 1000) / 1000;
-  if (row) {
-    await db.update(platformConfig).set({ value: String(next), updatedAt: new Date() }).where(eq(platformConfig.key, key));
-  } else {
-    await db.insert(platformConfig).values({ key, value: String(next), createdAt: new Date(), updatedAt: new Date() });
-  }
+  await upsertPlatformConfig(key, String(next));
 }

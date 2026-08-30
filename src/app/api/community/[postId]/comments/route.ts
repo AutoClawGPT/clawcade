@@ -1,53 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { communityComments, communityPosts, users, agents } from "@/lib/db/schema";
-import { eq, and, desc } from "drizzle-orm";
-import { v4 as uuid } from "uuid";
+import { findUserByAuthToken, findAgentByToken, newId } from "@/lib/db/clickhouse-store";
+import { chSelectAll, chInsert } from "@/lib/clickhouse";
+
+const Q = (s: string) => "'" + s.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
 async function resolveActor(req: NextRequest): Promise<{ user?: any; agent?: any } | null> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
   const token = authHeader.slice(7);
-  const [user] = await db.select().from(users).where(eq(users.authToken, token)).limit(1);
+  const user = await findUserByAuthToken(token);
   if (user) return { user };
-  const [agent] = await db.select().from(agents).where(eq(agents.agentToken, token)).limit(1);
+  const agent = await findAgentByToken(token);
   if (agent) return { agent };
   return null;
 }
 
-// GET /api/community/:postId/comments
-export async function GET(req: NextRequest, ctx: { params: { postId: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ postId: string }> }) {
   try {
     const { postId } = await ctx.params;
-    const rows = await db
-      .select({
-        id: communityComments.id,
-        content: communityComments.content,
-        createdAt: communityComments.createdAt,
-        userId: communityComments.userId,
-        agentId: communityComments.agentId,
-        userName: users.name,
-        userImage: users.image,
-        agentName: agents.name,
-        agentAvatar: agents.avatarUrl,
-      })
-      .from(communityComments)
-      .leftJoin(users, eq(communityComments.userId, users.id))
-      .leftJoin(agents, eq(communityComments.agentId, agents.id))
-      .where(eq(communityComments.postId, postId))
-      .orderBy(desc(communityComments.createdAt))
-      .limit(100);
-
+    const rows = await chSelectAll(
+      `SELECT c.*, u.name AS user_name, u.image AS user_image, a.name AS agent_name, a.avatar_url AS agent_avatar
+       FROM clawcade.community_comments c
+       LEFT JOIN clawcade.users u ON c.user_id = u.id
+       LEFT JOIN clawcade.agents a ON c.agent_id = a.id
+       WHERE c.post_id = ${Q(postId)}
+       ORDER BY c.created_at DESC LIMIT 100`
+    );
     return NextResponse.json({
       success: true,
-      comments: rows.map((r) => ({
-        id: r.id,
-        content: r.content,
-        createdAt: r.createdAt,
-        isAgent: !!r.agentId,
-        authorId: r.agentId || r.userId,
-        authorName: r.agentName || r.userName || "unknown",
-        authorImage: r.agentAvatar || r.userImage,
+      comments: rows.map((r: any) => ({
+        id: r.id, content: r.content, createdAt: r.created_at, isAgent: !!r.agent_id,
+        authorId: r.agent_id || r.user_id, authorName: r.agent_name || r.user_name || "unknown",
+        authorImage: r.agent_avatar || r.user_image,
       })),
     });
   } catch (error: unknown) {
@@ -56,38 +40,30 @@ export async function GET(req: NextRequest, ctx: { params: { postId: string } })
   }
 }
 
-// POST /api/community/:postId/comments
-export async function POST(req: NextRequest, ctx: { params: { postId: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ postId: string }> }) {
   try {
     const { postId } = await ctx.params;
     const actor = await resolveActor(req);
     if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
     const body = await req.json();
     const { content } = body;
-    if (!content || !String(content).trim()) {
-      return NextResponse.json({ error: "content is required" }, { status: 400 });
-    }
+    if (!content || !String(content).trim()) return NextResponse.json({ error: "content is required" }, { status: 400 });
 
-    const [post] = await db.select().from(communityPosts).where(eq(communityPosts.id, postId)).limit(1);
-    if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+    const postExists = await chSelectAll("SELECT 1 FROM clawcade.community_posts WHERE id = " + Q(postId) + " LIMIT 1");
+    if (!postExists.length) return NextResponse.json({ error: "Post not found" }, { status: 404 });
 
     const userId = actor.agent ? actor.agent.userId : actor.user.id;
-    const agentId = actor.agent ? actor.agent.id : null;
-
-    const [comment] = await db
-      .insert(communityComments)
-      .values({ id: uuid(), postId, userId, agentId, content: String(content).trim().slice(0, 500), createdAt: new Date() })
-      .returning();
-
-    await db
-      .update(communityPosts)
-      .set({ comments: (post.comments || 0) + 1 })
-      .where(eq(communityPosts.id, postId));
-
-    return NextResponse.json({ success: true, comment }, { status: 201 });
+    const agentId = actor.agent ? actor.agent.id : "";
+    const commentId = newId();
+    await chInsert("clawcade.community_comments", [{ id: commentId, post_id: postId, user_id: userId, agent_id: agentId, content: String(content).trim().slice(0, 500) }]);
+    await chExecUpdate(postId);
+    return NextResponse.json({ success: true, comment: { id: commentId, postId, userId, agentId: agentId || null, content: String(content).trim().slice(0, 500), createdAt: new Date() } }, { status: 201 });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
+}
+async function chExecUpdate(postId: string) {
+  const { chExec } = await import("@/lib/clickhouse");
+  await chExec("ALTER TABLE clawcade.community_posts UPDATE comments = comments + 1 WHERE id = " + Q(postId) + " SETTINGS mutations_sync = 1", { timeoutMs: 15000 });
 }

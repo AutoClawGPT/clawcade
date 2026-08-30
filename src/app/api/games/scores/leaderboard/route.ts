@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { scores, users, agents, games } from "@/lib/db/schema";
-import { eq, desc, sql, gte, and } from "drizzle-orm";
+import { findGameBySlug } from "@/lib/db/clickhouse-store";
+import { chSelectAll as chAll } from "@/lib/clickhouse";
+
+const Q = (s: string) => "'" + s.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -12,65 +13,43 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   let since: Date;
   switch (period) {
-    case "hourly":
-      since = new Date(now.getTime() - 60 * 60 * 1000);
-      break;
-    case "daily":
-      since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      break;
-    case "weekly":
-      since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    default:
-      since = new Date(0);
+    case "hourly": since = new Date(now.getTime() - 60 * 60 * 1000); break;
+    case "daily": since = new Date(now.getTime() - 24 * 60 * 60 * 1000); break;
+    case "weekly": since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+    default: since = new Date(0);
   }
+  const sinceStr = since.toISOString().slice(0, 19).replace("T", " ");
 
   let gameId: string | null = null;
   if (gameSlug) {
-    const [game] = await db.select({ id: games.id }).from(games).where(eq(games.slug, gameSlug)).limit(1);
+    const game = await findGameBySlug(gameSlug);
     gameId = game?.id || null;
   }
+  const sinceClause = `s.created_at >= '${sinceStr}'`;
+  const gameClause = gameId ? ` AND s.game_id = '${gameId.replace(/'/g, "\\'")}'` : "";
 
-  // Agent scores (agents submitted via agentToken)
-  const agentBase = db
-    .select({
-      key: sql<string>`'agent:' || ${agents.id}::text`.as("key"),
-      agentId: agents.id,
-      actorName: agents.name,
-      actorImage: agents.avatarUrl,
-      totalScore: sql<number>`coalesce(sum(${scores.score}),0)`.as("total_score"),
-      gamesPlayed: sql<number>`count(*)`.as("games_played"),
-      bestScore: sql<number>`max(${scores.score})`.as("best_score"),
-    })
-    .from(scores)
-    .innerJoin(agents, eq(scores.agentId, agents.id))
-    .where(gameId ? and(gte(scores.createdAt, since), eq(scores.gameId, gameId)) : gte(scores.createdAt, since))
-    .groupBy(agents.id, agents.name, agents.avatarUrl);
+  const agentRows = await chAll(
+    `SELECT 'agent' AS kind, a.id AS actor_id, a.name AS actor_name, a.avatar_url AS actor_image,
+            coalesce(sum(s.score), 0) AS total_score, count() AS games_played, max(s.score) AS best_score
+     FROM clawcade.scores s
+     INNER JOIN clawcade.agents a ON s.agent_id = a.id
+     WHERE ${sinceClause}${gameClause}
+     GROUP BY a.id, a.name, a.avatar_url
+     ORDER BY total_score DESC LIMIT ${limit}`
+  );
 
-  const agentRows = await agentBase.orderBy(desc(sql`sum(${scores.score})`)).limit(limit);
-
-  // Human scores (no agent)
-  const humanBase = db
-    .select({
-      key: sql<string>`'user:' || ${users.id}::text`.as("key"),
-      userId: users.id,
-      actorName: users.name,
-      actorImage: users.image,
-      totalScore: sql<number>`coalesce(sum(${scores.score}),0)`.as("total_score"),
-      gamesPlayed: sql<number>`count(*)`.as("games_played"),
-      bestScore: sql<number>`max(${scores.score})`.as("best_score"),
-    })
-    .from(scores)
-    .innerJoin(users, eq(scores.userId, users.id))
-    .where(gameId
-      ? and(gte(scores.createdAt, since), eq(scores.gameId, gameId), sql`${scores.agentId} is null`)
-      : and(gte(scores.createdAt, since), sql`${scores.agentId} is null`))
-    .groupBy(users.id, users.name, users.image);
-
-  const humanRows = await humanBase.orderBy(desc(sql`sum(${scores.score})`)).limit(limit);
+  const humanRows = await chAll(
+    `SELECT 'user' AS kind, u.id AS actor_id, u.name AS actor_name, u.image AS actor_image,
+            coalesce(sum(s.score), 0) AS total_score, count() AS games_played, max(s.score) AS best_score
+     FROM clawcade.scores s
+     INNER JOIN clawcade.users u ON s.user_id = u.id
+     WHERE ${sinceClause}${gameClause} AND s.agent_id = ''
+     GROUP BY u.id, u.name, u.image
+     ORDER BY total_score DESC LIMIT ${limit}`
+  );
 
   const merged = [...agentRows, ...humanRows]
-    .sort((a, b) => (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0))
+    .sort((a, b) => (Number(b.total_score) || 0) - (Number(a.total_score) || 0))
     .slice(0, limit);
 
   return NextResponse.json({
@@ -78,14 +57,14 @@ export async function GET(req: NextRequest) {
     game: gameSlug || "all",
     leaderboard: merged.map((r, i) => ({
       rank: i + 1,
-      userId: r.userId,
-      agentId: r.agentId,
-      isAgent: !!r.agentId,
-      name: r.actorName,
-      image: r.actorImage,
-      totalScore: Number(r.totalScore) || 0,
-      gamesPlayed: Number(r.gamesPlayed) || 0,
-      bestScore: Number(r.bestScore) || 0,
+      userId: r.kind === "user" ? r.actor_id : undefined,
+      agentId: r.kind === "agent" ? r.actor_id : undefined,
+      isAgent: r.kind === "agent",
+      name: r.actor_name,
+      image: r.actor_image,
+      totalScore: Number(r.total_score) || 0,
+      gamesPlayed: Number(r.games_played) || 0,
+      bestScore: Number(r.best_score) || 0,
     })),
   });
 }
