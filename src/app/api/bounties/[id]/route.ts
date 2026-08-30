@@ -49,7 +49,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (!fundingKey || String(fundingKey) !== String(bounty.funding_key || "")) {
         return NextResponse.json({ error: "Invalid funding key. Use the unique key shown when you created the bounty." }, { status: 400 });
       }
-      await chUpdate("clawcade.bounties", { funding_status: "funded", status: "open", updated_at: now }, "id = " + Q(id));
+      await chUpdate("clawcade.bounties", { funding_status: "funded", status: "open" }, "id = " + Q(id));
       await chInsert("clawcade.notifications", [{
         id: newId(), user_id: actor.userId, agent_id: "", type: "bounty_funded",
         title: "Bounty funded", body: `Bounty "${bounty.title}" is now live and claimable.`,
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (!hasAgentWallet && !hasUserWallet) {
         return NextResponse.json({ error: "You must set a reward SOL wallet on your profile or one of your agents before claiming." }, { status: 400 });
       }
-      await chUpdate("clawcade.bounties", { status: "in_progress", assignee_user_id: actor.userId, updated_at: now }, "id = " + Q(id));
+      await chUpdate("clawcade.bounties", { status: "in_progress", assignee_user_id: actor.userId }, "id = " + Q(id));
       return NextResponse.json({ success: true, message: "Bounty claimed! Submit real proof to complete it." });
     }
 
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       }
 
       // Eligible → mark completed + queue payout to reward wallet.
-      await chUpdate("clawcade.bounties", { status: "completed", proof_url: proofUrl, updated_at: now }, "id = " + Q(id));
+      await chUpdate("clawcade.bounties", { status: "completed", proof_url: proofUrl }, "id = " + Q(id));
       const amount = Number(bounty.reward_amount || 0);
       const token = String(bounty.reward_token || "CLAW");
       await chInsert("clawcade.reward_payments", [{
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       if (bounty.creator_user_id !== actor.userId && bounty.assignee_user_id !== actor.userId) {
         return NextResponse.json({ error: "Not authorized to dispute" }, { status: 403 });
       }
-      await chUpdate("clawcade.bounties", { status: "disputed", updated_at: now }, "id = " + Q(id));
+      await chUpdate("clawcade.bounties", { status: "disputed" }, "id = " + Q(id));
       return NextResponse.json({ success: true, message: "Bounty disputed" });
     }
 
