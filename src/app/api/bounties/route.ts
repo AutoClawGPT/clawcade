@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
       title, description, reward_token: token, reward_amount: String(rewardAmount),
       deliverable: deliverable || null, status: "open", escrow_wallet: "",
       assignee_user_id: "", proof_url: "",
-      deadline: deadline ? new Date(deadline).toISOString().slice(0, 19).replace("T", " ") : "", created_at: now, updated_at: now,
+      deadline: deadline ? new Date(deadline).toISOString().slice(0, 19).replace("T", " ") : null, created_at: now, updated_at: now,
       funding_key: fundingKey, funding_wallet: treasuryWallet, funding_status: "awaiting",
       funded_amount: "0", remaining_amount: String(rewardAmount),
     };
