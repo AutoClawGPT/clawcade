@@ -218,6 +218,7 @@ export async function updateUser(id: string, data: Record<string, any>): Promise
     bestStreak: "best_streak", tokensEarned: "tokens_earned", payoutWallet: "payout_wallet",
     rewardWallet: "reward_wallet", claimMethod: "claim_method", walletSecretEncrypted: "wallet_secret_encrypted",
     twitterHandle: "twitter_handle", twitterVerifyCode: "twitter_verify_code",
+    twitterVerified: "twitter_verified", twitterVerifyExpiry: "twitter_verify_expiry",
   };
   for (const [key, col] of Object.entries(map)) {
     if (key in data) {
