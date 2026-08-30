@@ -89,8 +89,8 @@ export function createCryptoSmash(engine: GameEngine) {
     player.x += player.vx;
     player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
 
-    // Jump
-    if ((inp.keys.has('ArrowUp') || inp.keys.has('w') || inp.keys.has(' ')) && player.y >= H - 100) {
+    // Jump (ArrowUp / W only — space is reserved for nothing here to avoid conflict)
+    if ((inp.keys.has('ArrowUp') || inp.keys.has('w')) && player.y >= H - 100) {
       player.vy = -10;
       engine.logMove('jump', player.x);
     }
@@ -100,7 +100,7 @@ export function createCryptoSmash(engine: GameEngine) {
 
     // Attack
     player.attackCd -= dt;
-    if (player.attackCd <= 0 && (inp.keys.has('z') || inp.keys.has('j') || inp.keys.has(' '))) {
+    if (player.attackCd <= 0 && (inp.keys.has('z') || inp.keys.has('j'))) {
       player.attackCd = 200;
       engine.sound.play('shoot');
       engine.logMove('attack', player.x, player.y);

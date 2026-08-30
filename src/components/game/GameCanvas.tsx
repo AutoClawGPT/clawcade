@@ -45,6 +45,7 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
     const parent = canvas.parentElement;
     const w = Math.min(parent?.clientWidth || 800, 800);
     const h = Math.min(600, Math.floor(w * 0.75));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
     seedRef.current = Math.floor(Math.random() * 2147483647);
 
@@ -52,6 +53,7 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
       canvas,
       width: w,
       height: h,
+      dpr,
       seed: seedRef.current,
       onScoreChange: setScore,
       onStateChange: setState,
@@ -65,7 +67,16 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
   }, [game]);
 
   const handleStart = () => {
-    engineRef.current?.start();
+    const eng = engineRef.current;
+    if (!eng) return;
+    if (state === 'playing' || state === 'paused') {
+      // Restart cleanly: stop (detach listeners) then rebuild to avoid duplicates
+      eng.stop();
+      initEngine();
+      setTimeout(() => engineRef.current?.start(), 50);
+    } else {
+      eng.start();
+    }
   };
 
   const handleRestart = () => {
@@ -193,10 +204,10 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
         )}
         {state !== 'idle' && (
           <button
-            onClick={handleStart}
+            onClick={handleRestart}
             className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 rounded text-sm text-white font-semibold cursor-pointer active:scale-95"
           >
-            {state === 'playing' ? '▶ Start (reset)' : '▶ Start'}
+            ↻ Restart
           </button>
         )}
       </div>

@@ -8,9 +8,9 @@ export function createRocketRide(engine: GameEngine) {
   const H = engine.height;
 
   const player = { x: W / 2, y: H - 100, vy: 0, vx: 0, tilt: 0 };
-  const gravity = 0.15;
-  const thrust = -0.6;
-  const moveSpeed = 0.3;
+  const moveSpeed = 0.32;
+  const BASE_ASCENT = 2.6; // auto climb to the moon
+  const TILT_MAX = 0.22;
 
   interface Obstacle {
     x: number;
@@ -82,16 +82,19 @@ export function createRocketRide(engine: GameEngine) {
     if (inp.keys.has('p') || inp.keys.has('P')) { engine.pause(); return; }
     if (inp.keys.has('r') || inp.keys.has('R')) { engine.stop(); engine.start(); return; }
 
-    // Controls
-    if (inp.keys.has('ArrowLeft') || inp.keys.has('a')) player.vx -= moveSpeed;
-    if (inp.keys.has('ArrowRight') || inp.keys.has('d')) player.vx += moveSpeed;
+    // Controls: steer left/right; up/down adjust climb speed slightly
+    let targetVx = 0;
+    if (inp.keys.has('ArrowLeft') || inp.keys.has('a')) targetVx -= moveSpeed;
+    if (inp.keys.has('ArrowRight') || inp.keys.has('d')) targetVx += moveSpeed;
+    player.vx += (targetVx - player.vx) * 0.18; // smooth steering
 
-    // Apply thrust (always going up)
-    player.vy += thrust * 0.3 + gravity;
-    player.vy = Math.max(-8, Math.min(4, player.vy));
+    // Climb: always ascending; up/down nudge for dodging
+    let targetVy = -BASE_ASCENT;
+    if (inp.keys.has('ArrowUp') || inp.keys.has('w')) targetVy -= 1.6;
+    if (inp.keys.has('ArrowDown') || inp.keys.has('s')) targetVy += 1.8;
+    player.vy += (targetVy - player.vy) * 0.15;
 
-    // Apply horizontal
-    player.vx *= 0.92; // friction
+    // Apply motion
     player.x += player.vx;
     player.y += player.vy;
 
@@ -99,8 +102,8 @@ export function createRocketRide(engine: GameEngine) {
     player.x = Math.max(20, Math.min(W - 20, player.x));
     player.y = Math.max(50, Math.min(H - 30, player.y));
 
-    // Tilt
-    player.tilt = player.vx * 0.08;
+    // Tilt follows horizontal velocity (smoothed)
+    player.tilt += (Math.max(-TILT_MAX, Math.min(TILT_MAX, player.vx * 0.35)) - player.tilt) * 0.2;
 
     // Distance / score
     distance += scrollSpeed;

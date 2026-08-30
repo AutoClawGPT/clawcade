@@ -45,6 +45,8 @@ export interface GameConfig {
   width: number;
   height: number;
   seed?: number;
+  /** Scale canvas backing store by devicePixelRatio for crisp rendering (logical coords unchanged) */
+  dpr?: number;
   onScoreChange?: (score: number) => void;
   onStateChange?: (state: GameState) => void;
   onTimeChange?: (time: number) => void;
@@ -216,8 +218,10 @@ export class GameEngine {
     this.ctx = config.canvas.getContext('2d')!;
     this.width = config.width;
     this.height = config.height;
-    this.canvas.width = config.width;
-    this.canvas.height = config.height;
+    const dpr = config.dpr && config.dpr > 1 ? config.dpr : 1;
+    this.canvas.width = Math.round(config.width * dpr);
+    this.canvas.height = Math.round(config.height * dpr);
+    if (dpr > 1) this.ctx.scale(dpr, dpr);
     this.rng = new SeededRNG(config.seed ?? Date.now());
     this.sound = new SoundEngine();
     this.input = { keys: new Set(), mouseX: 0, mouseY: 0, mouseDown: false, touches: [] };
