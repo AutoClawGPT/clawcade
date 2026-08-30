@@ -4,6 +4,7 @@ import { scores, users, games } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { createHash } from "crypto";
+import { clickhouseInsert } from "@/lib/clickhouse";
 
 async function getUserFromAuth(authHeader: string | null) {
   if (!authHeader?.startsWith("Bearer ")) return null;
@@ -80,6 +81,13 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date(),
     })
     .where(eq(users.id, user.id));
+
+  // Best-effort analytics event (ClickHouse Cloud)
+  void clickhouseInsert(
+    "clawcade.game_events",
+    ["actor_type", "actor_id", "game_slug", "score", "duration", "event_type"],
+    [["human", user.id, slug, score, duration || 0, "score"]]
+  );
 
   return NextResponse.json({
     success: true,

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { scores, games, agents, users } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
+import { clickhouseInsert } from "@/lib/clickhouse";
 
 // POST /api/agents/play — Agent submits a game score
 export async function POST(req: NextRequest) {
@@ -99,6 +100,13 @@ export async function POST(req: NextRequest) {
       })
       .where(eq(users.id, agent.userId));
   }
+
+  // Best-effort analytics event (ClickHouse Cloud)
+  void clickhouseInsert(
+    "clawcade.game_events",
+    ["actor_type", "actor_id", "game_slug", "score", "duration", "event_type"],
+    [["agent", agent.id, gameSlug, score, duration || 0, "score"]]
+  );
 
   return NextResponse.json({
     success: true,

@@ -50,6 +50,7 @@ export default function AnalyticsPage() {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [ch, setCh] = useState<{ perGame: Array<{ game_slug: string; events: string; total_score: string; players: string }>; totals: Record<string, string>; recent: Array<Record<string, unknown>> } | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -71,6 +72,11 @@ export default function AnalyticsPage() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+
+    fetch("/api/analytics", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setCh(data))
+      .catch(() => setCh(null));
   }, [authToken, authLoading]);
 
   return (
@@ -141,6 +147,55 @@ export default function AnalyticsPage() {
           />
         </div>
       )}
+
+      <div className="mt-8">
+        <div className="mb-4">
+          <h2 className="text-xl font-bold text-white">Live Platform Analytics</h2>
+          <p className="text-gray-400 text-sm">Real-time game activity streamed to ClickHouse Cloud</p>
+        </div>
+        {!ch ? (
+          <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-8 text-center">
+            <p className="text-gray-500 text-sm">Analytics backend warming up — data appears as agents play.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Per-Game Activity</h3>
+              {ch.perGame.length === 0 ? (
+                <p className="text-gray-500 text-sm">No game events yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {ch.perGame.map((g) => (
+                    <div key={g.game_slug} className="flex items-center justify-between border-b border-[#1f1f1f] pb-2">
+                      <span className="text-white font-mono text-sm">{g.game_slug}</span>
+                      <span className="text-gray-400 text-sm">
+                        {Number(g.events || 0).toLocaleString()} plays · {Number(g.players || 0)} players · {Number(g.total_score || 0).toLocaleString()} pts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Totals</h3>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-3xl font-bold text-[#00FF88]">{Number(ch.totals.total_events || 0).toLocaleString()}</div>
+                  <div className="text-gray-500 text-xs mt-1">Events</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-[#A855F7]">{Number(ch.totals.total_players || 0).toLocaleString()}</div>
+                  <div className="text-gray-500 text-xs mt-1">Players</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-bold text-[#FFD700]">{Number(ch.totals.total_score || 0).toLocaleString()}</div>
+                  <div className="text-gray-500 text-xs mt-1">Score</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

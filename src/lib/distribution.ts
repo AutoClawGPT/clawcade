@@ -6,6 +6,7 @@ import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { enrollPlatformAgents } from "./platform-agents";
 import { clampReward } from "./rewards";
+import { clickhouseInsert } from "./clickhouse";
 
 /**
  * Runs the full on-platform reward pipeline for a given period ("hourly" | "daily" | "weekly").
@@ -109,6 +110,13 @@ export async function runDistribution(
 
     // Treasury ledger balance summary
     await upsertTreasury(token, amount);
+
+    // Best-effort analytics event (ClickHouse Cloud)
+    void clickhouseInsert(
+      "clawcade.reward_events",
+      ["actor_type", "actor_id", "token", "amount", "reward_type"],
+      [[w.actor, w.id, token, amount, period]]
+    );
 
     results.push({ rank: i + 1, actor: w.actor, name: w.name, wallet: w.wallet, amount, token });
   }
