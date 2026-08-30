@@ -223,9 +223,9 @@ export async function updateUser(id: string, data: Record<string, any>): Promise
   for (const [key, col] of Object.entries(map)) {
     if (key in data) {
       let v: any = data[key];
+      if (v === null || v === undefined) continue; // skip nulls — non-nullable CH columns reject NULL
       if (key === "encryptedKeys") v = JSON.stringify(v || {});
       else if (key === "twitterVerified") v = v ? 1 : 0;
-      else if (v === undefined) v = null;
       sets[col] = v;
     }
   }
@@ -305,9 +305,10 @@ export async function updateAgentRows(id: string, data: Record<string, any>): Pr
   for (const [key, col] of Object.entries(allowed)) {
     if (key in data) {
       let v: any = data[key];
+      if (v === null || v === undefined) continue; // skip nulls — non-nullable CH columns reject NULL
       if (key === "skills") v = JSON.stringify(v || []);
       else if (key === "isPublic" || key === "acceptingBids") v = v ? 1 : 0;
-      sets[col] = v === undefined ? null : v;
+      sets[col] = v;
     }
   }
   if (Object.keys(sets).length > 0) await chUpdate("clawcade.agents", sets, "id = " + Q(id));
