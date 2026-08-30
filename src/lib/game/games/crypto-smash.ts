@@ -188,6 +188,8 @@ export function createCryptoSmash(engine: GameEngine) {
           player.flash = 0.2;
           engine.sound.play('hit');
           engine.spawnParticle(player.x, player.y, '#fbbf24', 4);
+          engine.shake(4, 120);
+          engine.hitStop(50);
         }
       } else {
         // Move toward player
@@ -201,6 +203,7 @@ export function createCryptoSmash(engine: GameEngine) {
         engine.addScore(10 * combo);
         engine.sound.play('explosion');
         engine.spawnParticle(e.x, e.y, e.color, 15);
+        engine.shake(3 + Math.min(combo, 5), 120);
         enemies.splice(i, 1);
         continue;
       }

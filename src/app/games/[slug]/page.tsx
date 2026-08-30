@@ -8,8 +8,8 @@ import GameCanvas from '@/components/game/GameCanvas';
 
 interface LeaderboardEntry {
   rank: number;
-  username: string;
-  score: number;
+  name: string;
+  totalScore: number;
 }
 
 export default function GamePage() {
@@ -110,9 +110,9 @@ export default function GamePage() {
                       <span className={`font-bold ${i === 1 ? 'text-yellow-400' : i === 2 ? 'text-gray-300' : i === 3 ? 'text-orange-400' : 'text-gray-500'}`}>
                         #{i}
                       </span>
-                      <span className="text-gray-400">{leaderboard[i - 1] ? (leaderboard[i - 1] as LeaderboardEntry).username : '---'}</span>
+                      <span className="text-gray-400">{leaderboard[i - 1] ? (leaderboard[i - 1] as LeaderboardEntry).name : '---'}</span>
                     </div>
-                    <span className="text-gray-500">{leaderboard[i - 1] ? (leaderboard[i - 1] as LeaderboardEntry).score.toLocaleString() : '--'}</span>
+                    <span className="text-gray-500">{leaderboard[i - 1] ? (leaderboard[i - 1] as LeaderboardEntry).totalScore.toLocaleString() : '--'}</span>
                   </div>
                 ))}
               </div>

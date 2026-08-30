@@ -37,6 +37,8 @@ export function createCascade(engine: GameEngine) {
   let fallSpeed = 3;
   const swapAnim: { from: { r: number; c: number }; to: { r: number; c: number }; t: number } | null = null;
   let processing = false;
+  const MAX_TIME = 180 * 1000; // 3-minute game
+  let gameEnded = false;
 
   function randomSymbol(): Symbol {
     return SYMBOLS[engine.rng.intRange(0, SYMBOLS.length - 1)];
@@ -94,6 +96,27 @@ export function createCascade(engine: GameEngine) {
     return matched;
   }
 
+  function hasValidMove(): boolean {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const a = grid[r]?.[c];
+        if (!a) continue;
+        const neighbors = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+        for (const [dr, dc] of neighbors) {
+          const nr = r + dr, nc = c + dc;
+          const b = grid[nr]?.[nc];
+          if (!b) continue;
+          // swap and check
+          grid[r][c] = b; grid[nr][nc] = a;
+          const m = findMatches();
+          grid[r][c] = a; grid[nr][nc] = b;
+          if (m.size > 0) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   function removeAndDrop() {
     const matches = findMatches();
     if (matches.size === 0) {
@@ -106,6 +129,7 @@ export function createCascade(engine: GameEngine) {
     const pts = matches.size * 10 * combo;
     engine.addScore(pts);
     engine.sound.play(combo > 1 ? 'combo' : 'collect');
+    engine.shake(Math.min(4 + combo, 10), Math.min(80 + combo * 20, 220));
 
     // Mark for removal
     for (const key of Array.from(matches)) {
@@ -206,6 +230,20 @@ export function createCascade(engine: GameEngine) {
 
     // Speed up over time
     fallSpeed = 3 + engine.time / 30000;
+
+    // Game over: time limit
+    if (!gameEnded && engine.time >= MAX_TIME) {
+      gameEnded = true;
+      engine.gameOver();
+      return;
+    }
+
+    // Game over: no valid moves remaining
+    if (!gameEnded && !processing && !selected && !hasValidMove()) {
+      gameEnded = true;
+      engine.gameOver();
+      return;
+    }
 
     // Input: arrow keys to move selection, space to select/swap
     if (!processing) {
@@ -347,5 +385,12 @@ export function createCascade(engine: GameEngine) {
     ctx.font = '12px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('Arrow keys to move • Z/Enter to swap • Find 3+ matches!', W / 2, H - 10);
+
+    // Timer
+    const timeLeft = Math.max(0, Math.ceil((MAX_TIME - engine.time) / 1000));
+    ctx.fillStyle = timeLeft <= 30 ? '#ef4444' : '#64748b';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'right';
+    ctx.fillText(`⏱ ${Math.floor(timeLeft / 60)}:${(timeLeft % 60).toString().padStart(2, '0')}`, W - 20, 30);
   });
 }

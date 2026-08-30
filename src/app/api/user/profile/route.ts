@@ -13,7 +13,8 @@ function toNum(v: unknown): number {
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
+  if (!authHeader?.startsWith("Bearer "))
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const user = await findUserByAuthToken(authHeader.slice(7));
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

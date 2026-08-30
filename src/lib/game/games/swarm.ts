@@ -151,6 +151,8 @@ export function createSwarm(engine: GameEngine) {
       if (dist < player.r + e.r) {
         engine.sound.play('hit');
         engine.spawnParticle(player.x, player.y, '#fbbf24', 8);
+        engine.shake(5, 140);
+        engine.hitStop(60);
         enemies.splice(i, 1);
         // Player takes damage = lose score and brief invuln
         engine.addScore(-5);

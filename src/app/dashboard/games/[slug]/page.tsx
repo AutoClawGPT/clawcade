@@ -46,7 +46,7 @@ export default function DashboardGamePage() {
 
   const handleScoreSubmit = async (data: {
     gameId: string;
-    totalScore: number;
+    score: number;
     timeMs: number;
     seed: number;
     proof: string;
@@ -60,7 +60,13 @@ export default function DashboardGamePage() {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          gameId: data.gameId,
+          score: data.score,
+          duration: data.timeMs,
+          seed: data.seed,
+          proof: data.proof,
+        }),
       });
       const result = await res.json();
       if (result.success) {
@@ -118,11 +124,11 @@ export default function DashboardGamePage() {
                         #{i}
                       </span>
                       <span className="text-gray-400">
-                        {entry ? entry.username : '---'}
+                        {entry ? entry.name : '---'}
                       </span>
                     </div>
                     <span className="text-gray-500">
-                      {entry ? entry.score.toLocaleString() : '--'}
+                      {entry ? entry.totalScore.toLocaleString() : '--'}
                     </span>
                   </div>
                 );

@@ -147,6 +147,8 @@ export function createRocketRide(engine: GameEngine) {
       if (Math.abs(px - o.x) < (o.w / 2 + 12) && Math.abs(py - o.y) < (o.h / 2 + 15)) {
         engine.sound.play('die');
         engine.spawnParticle(player.x, player.y, '#ef4444', 20);
+        engine.shake(8, 250);
+        engine.hitStop(100);
         engine.gameOver();
         return;
       }
@@ -168,6 +170,7 @@ export function createRocketRide(engine: GameEngine) {
           engine.addScore(100);
           engine.sound.play('powerup');
           engine.spawnParticle(c.x, c.y, '#a78bfa', 15);
+          engine.shake(2, 80);
           // Brief speed reduction (easier)
           scrollSpeed *= 0.7;
         }

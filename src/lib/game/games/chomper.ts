@@ -240,6 +240,7 @@ export function createChomper(engine: GameEngine) {
           engine.addScore(200);
           engine.sound.play('explosion');
           engine.spawnParticle(g.x, g.y, g.color, 15);
+          engine.shake(3, 100);
           g.x = (COLS / 2) * CELL;
           g.y = (ROWS / 2) * CELL;
           g.scared = 0;
@@ -247,6 +248,8 @@ export function createChomper(engine: GameEngine) {
           lives--;
           engine.sound.play('die');
           engine.spawnParticle(player.x, player.y, '#ef4444', 10);
+          engine.shake(6, 180);
+          engine.hitStop(80);
           if (lives <= 0) {
             engine.gameOver();
             return;

@@ -188,6 +188,10 @@ export class GameEngine {
   input: InputState;
   particles: Particle[] = [];
   moves: MoveEntry[] = [];
+  // Juice: screen shake + hit-stop (freeze frames)
+  private shakeTime = 0;
+  private shakePower = 0;
+  private freezeUntil = 0;
 
   private rafId: number = 0;
   private lastTs: number = 0;
@@ -229,6 +233,9 @@ export class GameEngine {
     this.time = 0;
     this.particles = [];
     this.moves = [];
+    this.shakeTime = 0;
+    this.shakePower = 0;
+    this.freezeUntil = 0;
     this.lastTs = 0;
     this.emit();
     this.attachInput();
@@ -286,22 +293,41 @@ export class GameEngine {
   // --- Game loop ---
   private loop(ts: number) {
     if (this.state !== 'playing') return;
+    // Hit-stop: freeze updates for a few ms (frame holds, feels punchy)
+    if (this.freezeUntil > ts) {
+      this.rafId = requestAnimationFrame(this.boundLoop);
+      return;
+    }
     if (this.lastTs === 0) this.lastTs = ts;
     const dt = Math.min(ts - this.lastTs, 50); // cap to avoid spiral
     this.lastTs = ts;
     this.time += dt;
     this.onTimeChange?.(this.time);
 
-    // Update particles
+    // Update particles + shake decay
     this.updateParticles(dt);
+    this.updateShake(dt);
 
     // Game-specific update
     this.animFrame?.(dt);
+
+    // Shake transform (scaled slightly to hide edges)
+    const hasShake = this.shakeTime > 0 && this.shakePower > 0;
+    if (hasShake) {
+      const shx = (Math.random() * 2 - 1) * this.shakePower;
+      const shy = (Math.random() * 2 - 1) * this.shakePower;
+      this.ctx.save();
+      this.ctx.translate(this.width / 2, this.height / 2);
+      this.ctx.scale(1.015, 1.015);
+      this.ctx.translate(-this.width / 2 + shx, -this.height / 2 + shy);
+    }
 
     // Clear & render
     this.ctx.clearRect(0, 0, this.width, this.height);
     this.renderFrame?.();
     this.renderParticles();
+
+    if (hasShake) this.ctx.restore();
 
     this.rafId = requestAnimationFrame(this.boundLoop);
   }
@@ -321,6 +347,24 @@ export class GameEngine {
         color,
         size: this.rng.range(2, 6),
       });
+    }
+  }
+
+  /** Screen shake — call on hits/explosions */
+  shake(power: number, durationMs: number) {
+    this.shakePower = Math.max(this.shakePower, power);
+    this.shakeTime = Math.max(this.shakeTime, durationMs);
+  }
+
+  /** Hit-stop / freeze frames — call on impactful hits */
+  hitStop(ms: number) {
+    this.freezeUntil = Math.max(this.freezeUntil, performance.now() + ms);
+  }
+
+  private updateShake(dt: number) {
+    if (this.shakeTime > 0) {
+      this.shakeTime -= dt;
+      if (this.shakeTime <= 0) this.shakePower = 0;
     }
   }
 

@@ -197,7 +197,7 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            {r.isAgent && r.agent && (
+            {Boolean(r.isAgent) && (r.agent as { agentToken?: string } | undefined) && (
               <div className="bg-black border border-[#A855F7]/30 rounded-lg p-4 mb-4">
                 <label className="text-xs text-gray-400 mb-1 block">Agent Token (for auto-play)</label>
                 <div className="flex items-center gap-2">
