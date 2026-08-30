@@ -8,8 +8,8 @@ import GameCanvas from '@/components/game/GameCanvas';
 
 interface LeaderboardEntry {
   rank: number;
-  username: string;
-  score: number;
+  name: string;
+  totalScore: number;
 }
 
 export default function DashboardGamePage() {
@@ -46,7 +46,7 @@ export default function DashboardGamePage() {
 
   const handleScoreSubmit = async (data: {
     gameId: string;
-    score: number;
+    totalScore: number;
     timeMs: number;
     seed: number;
     proof: string;

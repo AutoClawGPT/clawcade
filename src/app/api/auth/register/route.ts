@@ -3,7 +3,7 @@ import { findUserByEmail, createUser, newId } from "@/lib/db/clickhouse-store";
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { email, name, walletAddress, image } = body;
+  const { email, name, walletAddress, image, rewardWallet, claimMethod } = body;
 
   if (!email || !name) {
     return NextResponse.json(
@@ -36,6 +36,8 @@ export async function POST(req: NextRequest) {
     totalScore: 0,
     totalGames: 0,
     encryptedKeys: {},
+    rewardWallet: rewardWallet || "",
+    claimMethod: claimMethod || "manual",
   });
 
   return NextResponse.json({
