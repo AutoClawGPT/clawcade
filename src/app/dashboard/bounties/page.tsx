@@ -19,6 +19,11 @@ interface Bounty {
   createdAt: string;
   isAssignee: boolean;
   isMine: boolean;
+  fundingKey: string;
+  fundingWallet: string;
+  fundingStatus: string;
+  fundedAmount: string;
+  remainingAmount: string;
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -42,6 +47,8 @@ export default function BountiesPage() {
   const [rewardAmount, setRewardAmount] = useState("");
   const [deliverable, setDeliverable] = useState("");
   const [creating, setCreating] = useState(false);
+  const [fundKeyPrompt, setFundKeyPrompt] = useState<Bounty | null>(null);
+  const [fundKeyInput, setFundKeyInput] = useState("");
 
   async function load() {
     const token = localStorage.getItem("authToken");
@@ -87,7 +94,7 @@ export default function BountiesPage() {
     }
   }
 
-  async function act(id: string, action: string, proofUrl?: string) {
+  async function act(id: string, action: string, proofUrl?: string, fundingKey?: string) {
     const token = localStorage.getItem("authToken");
     if (!token) { setError("Sign in first"); return; }
     setActionLoading(id);
@@ -96,7 +103,7 @@ export default function BountiesPage() {
       const res = await fetch(`/api/bounties/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action, proofUrl }),
+        body: JSON.stringify({ action, proofUrl, fundingKey }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Action failed"); return; }
@@ -148,6 +155,7 @@ export default function BountiesPage() {
                   className="w-full bg-black border border-[#1f1f1f] rounded-lg px-3 py-2.5 text-white focus:border-[#00FF88] focus:outline-none">
                   <option value="CLAW">$CLAW</option>
                   <option value="ANSEM">$ANSEM</option>
+                  <option value="PLATFORM">$CLAWCADE (platform token)</option>
                 </select>
               </div>
               <div>
@@ -161,6 +169,9 @@ export default function BountiesPage() {
               <input value={deliverable} onChange={(e) => setDeliverable(e.target.value)} placeholder="Working strategy code + backtest"
                 className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white focus:border-[#00FF88] focus:outline-none" />
             </div>
+            <p className="text-xs text-gray-500 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+              After posting, you must <span className="text-[#00FF88]">send the reward tokens</span> to the platform treasury wallet and confirm with your unique funding key. The bounty only opens for claims once funded.
+            </p>
             <button type="submit" disabled={creating}
               className="w-full bg-[#00FF88] text-black font-semibold py-2.5 rounded-lg hover:bg-[#00FF88]/90 transition-colors disabled:opacity-50">
               {creating ? <span className="flex items-center justify-center gap-2"><Loader2 size={16} className="animate-spin" />Posting...</span> : "Post Bounty"}
@@ -203,10 +214,32 @@ export default function BountiesPage() {
               {b.deliverable && (
                 <p className="text-xs text-gray-500 mb-3"><Trophy size={12} className="inline mr-1 -mt-0.5" />Deliverable: {b.deliverable}</p>
               )}
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-3">
                 <span className="text-[#FFD700] font-bold">{b.rewardAmount} {b.rewardToken}</span>
                 <span className="text-xs text-gray-500">by {b.creatorName || "anonymous"}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border uppercase ${
+                  b.fundingStatus === "funded" ? "bg-[#00FF88]/10 text-[#00FF88] border-[#00FF88]/30"
+                  : b.fundingStatus === "awaiting" ? "bg-[#FFD700]/10 text-[#FFD700] border-[#FFD700]/30"
+                  : "bg-red-500/10 text-red-400 border-red-500/30"
+                }`}>
+                  {b.fundingStatus === "funded" ? "Funded" : "Awaiting Funding"}
+                </span>
               </div>
+              {b.isMine && b.fundingStatus === "awaiting" && (
+                <div className="bg-black border border-[#FFD700]/20 rounded-lg p-3 mb-3">
+                  <p className="text-xs text-gray-400 mb-1"><span className="text-[#FFD700] font-mono">{b.fundingKey}</span> — your unique funding key</p>
+                  <p className="text-[10px] text-gray-500 break-all mb-2">Send {b.rewardAmount} {b.rewardToken} to: <span className="text-[#00FF88] font-mono">{b.fundingWallet || "platform treasury wallet (set in platform config)"}</span></p>
+                  <button onClick={() => { setFundKeyPrompt(b); setFundKeyInput(""); }}
+                    className="text-xs bg-[#FFD700]/10 text-[#FFD700] border border-[#FFD700]/40 px-3 py-1.5 rounded-lg hover:bg-[#FFD700]/20 w-full">
+                    Confirm I Sent the Tokens (activate bounty)
+                  </button>
+                </div>
+              )}
+              {b.isMine && b.fundingStatus === "funded" && (
+                <div className="bg-black border border-[#00FF88]/20 rounded-lg p-3 mb-3">
+                  <p className="text-xs text-[#00FF88]">Funded · {b.remainingAmount} {b.rewardToken} remaining in escrow</p>
+                </div>
+              )}
               <div className="flex flex-wrap gap-2">
                 {b.status === "open" && (
                   <button onClick={() => act(b.id, "claim")} disabled={actionLoading === b.id}
@@ -236,6 +269,31 @@ export default function BountiesPage() {
               </div>
             </motion.div>
           ))}
+        </div>
+      )}
+
+      {/* Funding confirm modal */}
+      {fundKeyPrompt && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#111122] border border-[#FFD700]/30 rounded-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-white mb-2">Confirm Bounty Funding</h3>
+            <p className="text-sm text-gray-400 mb-4">
+              Enter the unique funding key to activate <span className="text-white">{fundKeyPrompt.title}</span>.
+            </p>
+            <input value={fundKeyInput} onChange={(e) => setFundKeyInput(e.target.value)} placeholder={fundKeyPrompt.fundingKey}
+              className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white font-mono mb-4 focus:border-[#FFD700] focus:outline-none" />
+            <div className="flex gap-3">
+              <button onClick={() => { act(fundKeyPrompt.id, "fund", undefined, fundKeyInput); setFundKeyPrompt(null); }}
+                disabled={actionLoading === fundKeyPrompt.id}
+                className="flex-1 bg-[#FFD700] text-black text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-[#FFD700]/90 disabled:opacity-50">
+                Confirm Funding
+              </button>
+              <button onClick={() => setFundKeyPrompt(null)}
+                className="flex-1 bg-white/5 border border-white/10 text-white text-sm px-4 py-2.5 rounded-lg hover:bg-white/10">
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { Gift, Clock, Calendar, Star, ExternalLink } from "lucide-react";
 
 const REWARD_SCHEDULE = [
@@ -124,9 +125,19 @@ export default function RewardsPage() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-white mb-2">Rewards</h1>
-        <p className="text-gray-400">Real token rewards for playing games</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-2">Rewards</h1>
+          <p className="text-gray-400">Real token rewards for playing games</p>
+        </div>
+        <Link href="/dashboard/distributions" className="text-sm bg-[#A855F7]/10 text-[#A855F7] border border-[#A855F7]/30 px-4 py-2 rounded-lg hover:bg-[#A855F7]/20">
+          View Live Distributions
+        </Link>
+      </div>
+
+      <div className="bg-[#0a0a0a] border border-[#A855F7]/30 rounded-xl p-5 mb-6">
+        <p className="text-sm text-white font-semibold mb-1">Score → Points → Tokens</p>
+        <p className="text-gray-400 text-xs">100,000 score = 10,000 points · 10,000 points = 100 CLAW / 10 ANSEM / 1,000 PLATFORM. Score is never the token amount.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
