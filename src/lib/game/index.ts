@@ -13,7 +13,7 @@ export const GAMES: GameFactory[] = [
     name: 'Crypto Smash',
     category: 'action',
     description: 'Punch and kick rug-pull scammers! Combo attacks for bonus points. Watch out for honeypots and dumpster fires.',
-    controls: 'Arrow keys to move • Z/Space to attack • X to throw projectile • Up/W to jump',
+    controls: '←→ / A D to move • Z to attack (both sides) • X to throw projectile • Up/W to jump',
     create: createCryptoSmash,
   },
   {

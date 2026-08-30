@@ -208,6 +208,7 @@ export class GameEngine {
   private boundTouchS = this.onTouchStart.bind(this);
   private boundTouchE = this.onTouchEnd.bind(this);
   private boundTouchM = this.onTouchMove.bind(this);
+  private boundBlur = this.onWindowBlur.bind(this);
 
   onScoreChange?: (s: number) => void;
   onStateChange?: (s: GameState) => void;
@@ -243,12 +244,15 @@ export class GameEngine {
     this.lastTs = 0;
     this.emit();
     this.attachInput();
+    window.addEventListener('blur', this.boundBlur);
     this.rafId = requestAnimationFrame(this.boundLoop);
   }
 
   stop() {
     this.state = 'idle';
     this.detachInput();
+    window.removeEventListener('blur', this.boundBlur);
+    this.input.keys.clear();
     cancelAnimationFrame(this.rafId);
     this.emit();
   }
@@ -460,6 +464,11 @@ export class GameEngine {
     const r = this.canvas.getBoundingClientRect();
     this.input.mouseX = e.clientX - r.left;
     this.input.mouseY = e.clientY - r.top;
+  }
+
+  // Clear all held keys when the window loses focus (prevents "stuck" buttons)
+  private onWindowBlur() {
+    this.input.keys.clear();
   }
   private onTouchStart(e: TouchEvent) {
     e.preventDefault();

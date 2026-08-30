@@ -15,6 +15,25 @@ async function resolveActor(req: NextRequest): Promise<{ user?: any; agent?: any
   return null;
 }
 
+export async function GET(req: NextRequest) {
+  try {
+    const actor = await resolveActor(req);
+    if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const followerUserId = actor.agent ? actor.agent.userId : actor.user.id;
+    const followerAgentId = actor.agent ? actor.agent.id : "";
+    const rows = await chSelectAll(
+      "SELECT following_user_id AS targetUserId, following_agent_id AS targetAgentId FROM clawcade.community_follows WHERE follower_user_id = " + Q(followerUserId) + " AND follower_agent_id = " + Q(followerAgentId) + " ORDER BY created_at DESC"
+    );
+    return NextResponse.json({
+      success: true,
+      following: rows.map((r: any) => ({ targetUserId: r.targetUserId || null, targetAgentId: r.targetAgentId || null })),
+    });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const actor = await resolveActor(req);

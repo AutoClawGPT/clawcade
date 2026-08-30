@@ -28,6 +28,8 @@ export function createCryptoSmash(engine: GameEngine) {
     vx: 0, vy: 0, hp: 100, maxHp: 100,
     color: '#f59e0b', type: 'player', attackCd: 0, flash: 0,
   };
+  // Facing: -1 = left, 1 = right. Updated by movement; used for melee + projectile direction.
+  let facing: 1 | -1 = 1;
 
   const enemies: Entity[] = [];
   const projectiles: { x: number; y: number; vx: number; vy: number; life: number }[] = [];
@@ -86,6 +88,8 @@ export function createCryptoSmash(engine: GameEngine) {
     player.vx = 0;
     if (inp.keys.has('ArrowLeft') || inp.keys.has('a')) player.vx = -speed;
     if (inp.keys.has('ArrowRight') || inp.keys.has('d')) player.vx = speed;
+    if (player.vx < 0) facing = -1;
+    if (player.vx > 0) facing = 1;
     player.x += player.vx;
     player.x = Math.max(player.w / 2, Math.min(W - player.w / 2, player.x));
 
@@ -104,34 +108,41 @@ export function createCryptoSmash(engine: GameEngine) {
       player.attackCd = 200;
       engine.sound.play('shoot');
       engine.logMove('attack', player.x, player.y);
-      // Melee range attack
-      const range = 70;
+      // Melee attack — full arc around the player (hits enemies on BOTH sides)
+      const range = 92;
       const attackRect = { x: player.x - range / 2, y: player.y - player.h / 2, w: range, h: player.h };
       for (const e of enemies) {
         const eRect = { x: e.x - e.w / 2, y: e.y - e.h / 2, w: e.w, h: e.h };
         if (GameEngine.rectRect(attackRect, eRect)) {
-          const dmg = 10 + combo * 2;
+          const dmg = 12 + combo * 2;
           e.hp -= dmg;
           e.flash = 0.15;
           engine.sound.play('hit');
           engine.spawnParticle(e.x, e.y, '#fbbf24', 8);
+          engine.logMove('attack_hit', e.x, e.y);
         }
       }
     }
 
-    // Projectile attack (x key)
-    if (inp.keys.has('x') || inp.keys.has('k')) {
-      if (player.attackCd <= 0) {
-        player.attackCd = 300;
-        projectiles.push({
-          x: player.x + (player.vx >= 0 ? 25 : -25),
-          y: player.y - 10,
-          vx: (player.vx >= 0 ? 1 : -1) * 8,
-          vy: 0,
-          life: 1,
-        });
-        engine.sound.play('shoot');
+    // Projectile attack (X key) — aims at the nearest enemy so it works on BOTH sides
+    if ((inp.keys.has('x') || inp.keys.has('k')) && player.attackCd <= 0) {
+      player.attackCd = 300;
+      let aimDir = facing;
+      let nearest: Entity | null = null;
+      let nearD = Infinity;
+      for (const e of enemies) {
+        const d = Math.hypot(e.x - player.x, e.y - player.y);
+        if (d < nearD) { nearD = d; nearest = e; }
       }
+      if (nearest) aimDir = nearest.x >= player.x ? 1 : -1;
+      projectiles.push({
+        x: player.x + aimDir * 30,
+        y: player.y - 10,
+        vx: aimDir * 8,
+        vy: 0,
+        life: 1,
+      });
+      engine.sound.play('shoot');
     }
 
     // Update projectiles

@@ -8,9 +8,9 @@ export function createRocketRide(engine: GameEngine) {
   const H = engine.height;
 
   const player = { x: W / 2, y: H - 100, vy: 0, vx: 0, tilt: 0 };
-  const moveSpeed = 0.32;
+  const moveSpeed = 0.55; // snappy steering
   const BASE_ASCENT = 2.6; // auto climb to the moon
-  const TILT_MAX = 0.22;
+  const TILT_MAX = 0.25;
 
   interface Obstacle {
     x: number;
@@ -82,28 +82,27 @@ export function createRocketRide(engine: GameEngine) {
     if (inp.keys.has('p') || inp.keys.has('P')) { engine.pause(); return; }
     if (inp.keys.has('r') || inp.keys.has('R')) { engine.stop(); engine.start(); return; }
 
-    // Controls: steer left/right; up/down adjust climb speed slightly
+    // Controls: LEFT/RIGHT steer (primary). Up/down removed — auto-climb + gentle bob.
     let targetVx = 0;
     if (inp.keys.has('ArrowLeft') || inp.keys.has('a')) targetVx -= moveSpeed;
     if (inp.keys.has('ArrowRight') || inp.keys.has('d')) targetVx += moveSpeed;
-    player.vx += (targetVx - player.vx) * 0.18; // smooth steering
+    // Snappy response (higher factor = less laggy)
+    player.vx += (targetVx - player.vx) * 0.28;
 
-    // Climb: always ascending; up/down nudge for dodging
-    let targetVy = -BASE_ASCENT;
-    if (inp.keys.has('ArrowUp') || inp.keys.has('w')) targetVy -= 1.6;
-    if (inp.keys.has('ArrowDown') || inp.keys.has('s')) targetVy += 1.8;
-    player.vy += (targetVy - player.vy) * 0.15;
+    // Vertical: constant ascent with a light bob so the rocket feels alive
+    player.y -= BASE_ASCENT * sDt * 60;
+    player.y += Math.sin(engine.time / 420) * 0.55 * sDt * 60;
+    player.vy = -BASE_ASCENT;
 
-    // Apply motion
+    // Apply horizontal motion
     player.x += player.vx;
-    player.y += player.vy;
 
     // Bounds
     player.x = Math.max(20, Math.min(W - 20, player.x));
     player.y = Math.max(50, Math.min(H - 30, player.y));
 
-    // Tilt follows horizontal velocity (smoothed)
-    player.tilt += (Math.max(-TILT_MAX, Math.min(TILT_MAX, player.vx * 0.35)) - player.tilt) * 0.2;
+    // Tilt follows horizontal velocity (snappier)
+    player.tilt += (Math.max(-TILT_MAX, Math.min(TILT_MAX, player.vx * 0.55)) - player.tilt) * 0.25;
 
     // Distance / score
     distance += scrollSpeed;

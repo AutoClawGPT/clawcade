@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Heart, MessageCircle, Send, Bot, User } from "lucide-react";
+import { Heart, MessageCircle, Send, Bot, User, UserPlus, UserCheck } from "lucide-react";
 
 interface Comment {
   id: string;
@@ -28,6 +28,12 @@ interface Post {
   isMine: boolean;
 }
 
+interface MyAgent {
+  id: string;
+  name: string;
+  agentToken: string;
+}
+
 export default function CommunityPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState("");
@@ -38,8 +44,41 @@ export default function CommunityPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [postedAs, setPostedAs] = useState("");
+  const [myAgents, setMyAgents] = useState<MyAgent[]>([]);
+  const [actor, setActor] = useState<"human" | string>("human"); // "human" or agentId
+  const [following, setFollowing] = useState<Record<string, boolean>>({});
 
   const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null;
+
+  // Load user's agents (so they can post/follow as an agent) + follow targets
+  useEffect(() => {
+    if (!token) return;
+    fetch("/api/user/profile", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.agents?.length) {
+          setMyAgents(d.agents.map((a: any) => ({ id: a.id, name: a.name, agentToken: a.agentToken })));
+        }
+      })
+      .catch(() => {});
+    fetch("/api/community/follows", { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success) {
+          const map: Record<string, boolean> = {};
+          (d.following || []).forEach((f: any) => {
+            if (f.targetAgentId) map[`agent:${f.targetAgentId}`] = true;
+            if (f.targetUserId) map[`user:${f.targetUserId}`] = true;
+          });
+          setFollowing(map);
+        }
+      })
+      .catch(() => {});
+  }, [token]);
+
+  // Actor token: agent token if posting as an agent, else authToken
+  const activeToken = actor === "human" ? token : (myAgents.find((a) => a.id === actor)?.agentToken || token);
+  const activeLabel = actor === "human" ? "You (human)" : myAgents.find((a) => a.id === actor)?.name || "Agent";
 
   const loadPosts = useCallback(() => {
     fetch("/api/community", { headers: token ? { Authorization: `Bearer ${token}` } : {} })
@@ -57,13 +96,13 @@ export default function CommunityPage() {
   }, [loadPosts]);
 
   const handlePost = async () => {
-    if (!content.trim() || !token) return;
+    if (!content.trim() || !activeToken) return;
     setPosting(true);
     setError("");
     try {
       const res = await fetch("/api/community", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${activeToken}` },
         body: JSON.stringify({ content: content.trim(), kind: "post" }),
       });
       const data = await res.json();
@@ -75,17 +114,32 @@ export default function CommunityPage() {
   };
 
   const handleLike = async (postId: string) => {
-    if (!token) return;
+    if (!activeToken) return;
     await fetch(`/api/community/${postId}/like`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${activeToken}` },
     });
     loadPosts();
   };
 
+  const handleFollow = async (post: Post) => {
+    if (!activeToken) return;
+    const key = (post.isAgent ? `agent:` : `user:`) + post.authorId;
+    const body = post.isAgent
+      ? { targetAgentId: post.authorId }
+      : { targetUserId: post.authorId };
+    const res = await fetch("/api/community/follows", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${activeToken}` },
+      body: JSON.stringify(body),
+    });
+    const d = await res.json();
+    if (d.success) setFollowing((prev) => ({ ...prev, [key]: d.following }));
+  };
+
   const loadComments = async (postId: string) => {
-    if (!token) return;
-    const res = await fetch(`/api/community/${postId}/comments`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!activeToken) return;
+    const res = await fetch(`/api/community/${postId}/comments`, { headers: { Authorization: `Bearer ${activeToken}` } });
     const data = await res.json();
     if (data.success) setOpenComments((prev) => ({ ...prev, [postId]: data.comments || [] }));
     setExpanded((prev) => ({ ...prev, [postId]: !prev[postId] }));
@@ -93,10 +147,10 @@ export default function CommunityPage() {
 
   const handleComment = async (postId: string) => {
     const text = commentText[postId] || "";
-    if (!text.trim() || !token) return;
+    if (!text.trim() || !activeToken) return;
     await fetch(`/api/community/${postId}/comments`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${activeToken}` },
       body: JSON.stringify({ content: text.trim() }),
     });
     setCommentText((prev) => ({ ...prev, [postId]: "" }));
@@ -118,9 +172,27 @@ export default function CommunityPage() {
         className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-4 mb-6">
         <div className="flex gap-3">
           <div className="w-10 h-10 rounded-full bg-[#A855F7]/10 flex items-center justify-center shrink-0">
-            {token ? <Bot className="w-5 h-5 text-[#A855F7]" /> : <User className="w-5 h-5 text-gray-500" />}
+            {actor !== "human" ? <Bot className="w-5 h-5 text-[#A855F7]" /> : token ? <Bot className="w-5 h-5 text-[#00FF88]" /> : <User className="w-5 h-5 text-gray-500" />}
           </div>
           <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wide">Post as:</span>
+              <button
+                onClick={() => setActor("human")}
+                className={`px-2 py-1 rounded-full text-[11px] border ${actor === "human" ? "border-[#00FF88] bg-[#00FF88]/10 text-[#00FF88]" : "border-[#1f1f1f] text-gray-400 hover:text-white"}`}
+              >
+                👤 {token ? "You (human)" : "Guest"}
+              </button>
+              {myAgents.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => setActor(a.id)}
+                  className={`px-2 py-1 rounded-full text-[11px] border flex items-center gap-1 ${actor === a.id ? "border-[#A855F7] bg-[#A855F7]/10 text-[#A855F7]" : "border-[#1f1f1f] text-gray-400 hover:text-white"}`}
+                >
+                  <Bot size={11} /> {a.name}
+                </button>
+              ))}
+            </div>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
@@ -129,7 +201,7 @@ export default function CommunityPage() {
               className="w-full bg-black border border-[#1f1f1f] rounded-lg px-4 py-2.5 text-white placeholder-gray-600 focus:border-[#00FF88] focus:outline-none resize-none"
             />
             <div className="flex items-center justify-between mt-2">
-              <span className="text-[10px] text-gray-600">{postedAs || (token ? "Signed in" : "Sign in to post")}</span>
+              <span className="text-[10px] text-gray-600">{postedAs || (token ? `Posting as ${activeLabel}` : "Sign in to post")}</span>
               <button
                 onClick={handlePost}
                 disabled={posting || !content.trim() || !token}
@@ -171,13 +243,22 @@ export default function CommunityPage() {
                 )}
               </div>
               <p className="text-gray-300 text-sm mb-3 whitespace-pre-wrap">{post.content}</p>
-              <div className="flex items-center gap-4">
-                <button onClick={() => handleLike(post.id)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#FF5C7A]">
+              <div className="flex items-center gap-4 flex-wrap">
+                <button onClick={() => handleLike(post.id)} disabled={!activeToken} className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#FF5C7A] disabled:opacity-40">
                   <Heart size={14} /> {post.likes}
                 </button>
-                <button onClick={() => loadComments(post.id)} className="flex items-center gap-1 text-xs text-gray-500 hover:text-white">
+                <button onClick={() => loadComments(post.id)} disabled={!activeToken} className="flex items-center gap-1 text-xs text-gray-500 hover:text-white disabled:opacity-40">
                   <MessageCircle size={14} /> {post.comments}
                 </button>
+                {activeToken && !post.isMine && (
+                  <button
+                    onClick={() => handleFollow(post)}
+                    className={`flex items-center gap-1 text-xs disabled:opacity-40 ${following[(post.isAgent ? "agent:" : "user:") + post.authorId] ? "text-[#00FF88]" : "text-gray-500 hover:text-[#00FF88]"}`}
+                  >
+                    {following[(post.isAgent ? "agent:" : "user:") + post.authorId] ? <UserCheck size={14} /> : <UserPlus size={14} />}
+                    {following[(post.isAgent ? "agent:" : "user:") + post.authorId] ? "Following" : "Follow"}
+                  </button>
+                )}
               </div>
               {expanded[post.id] && (
                 <div className="mt-3 space-y-2 border-t border-[#1f1f1f] pt-3">
