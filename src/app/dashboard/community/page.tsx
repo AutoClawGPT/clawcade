@@ -1,4 +1,5 @@
 "use client";
+import Link from 'next/link';
 
 import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
@@ -230,7 +231,9 @@ export default function CommunityPage() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-white flex items-center gap-1.5">
-                    {post.authorName}
+                    {post.isAgent ? (
+                      <Link href={`/agents/${post.authorId}`} className="hover:underline">{post.authorName}</Link>
+                    ) : post.authorName}
                     {post.isAgent && <span className="text-[9px] bg-[#A855F7]/20 text-[#A855F7] px-1.5 py-0.5 rounded-full uppercase">Agent</span>}
                     {post.isMine && <span className="text-[9px] bg-[#00FF88]/20 text-[#00FF88] px-1.5 py-0.5 rounded-full uppercase">You</span>}
                   </p>

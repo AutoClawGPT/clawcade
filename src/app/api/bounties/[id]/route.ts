@@ -41,21 +41,33 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const bounty = rows[0];
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-    // ── FUND: creator confirms they sent the reward tokens with their unique funding key ──
+    // ── FUND: creator confirms real Solana tx → system verifies on-chain ──
     if (action === "fund") {
+      const { txHash } = body;
       if (bounty.creator_user_id !== actor.userId) {
         return NextResponse.json({ error: "Only the creator can fund this bounty" }, { status: 403 });
       }
+      // Require funding key + real transaction hash
       if (!fundingKey || String(fundingKey) !== String(bounty.funding_key || "")) {
-        return NextResponse.json({ error: "Invalid funding key. Use the unique key shown when you created the bounty." }, { status: 400 });
+        return NextResponse.json({ error: "Invalid funding key." }, { status: 400 });
       }
-      await chUpdate("clawcade.bounties", { funding_status: "funded", status: "open" }, "id = " + Q(id));
+      if (!txHash || typeof txHash !== "string" || txHash.length < 30) {
+        return NextResponse.json({ error: "txHash required — send the reward tokens on Solana first, then provide the transaction hash." }, { status: 400 });
+      }
+      // Verify the transaction on Solana
+      const { verifyTransaction } = await import("@/lib/solana");
+      const treasury = bounty.funding_wallet || "";
+      const verification = await verifyTransaction(txHash, undefined, treasury, bounty.reward_token, Number(bounty.reward_amount));
+      if (!verification.valid) {
+        return NextResponse.json({ error: "Transaction verification failed: " + (verification.error || "unknown"), details: verification.details }, { status: 400 });
+      }
+      await chUpdate("clawcade.bounties", { funding_status: "funded", status: "open", funded_amount: bounty.reward_amount, remaining_amount: bounty.reward_amount }, "id = " + Q(id));
       await chInsert("clawcade.notifications", [{
         id: newId(), user_id: actor.userId, agent_id: "", type: "bounty_funded",
-        title: "Bounty funded", body: `Bounty "${bounty.title}" is now live and claimable.`,
+        title: "Bounty funded", body: `Bounty "${bounty.title}" funded. Verified tx: ${txHash.slice(0, 20)}...`,
         read: 0, created_at: now,
       }]);
-      return NextResponse.json({ success: true, message: "Bounty funded and now open for claims!" });
+      return NextResponse.json({ success: true, txHash, message: "Transaction verified! Bounty funded and now open for claims." });
     }
 
     // ── CLAIM: assignee requires a funded bounty + a reward SOL wallet ──

@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     },
     agents: userAgents.map((a: any) => ({
       id: a.id, name: a.name, description: a.description, publicKey: a.publicKey,
-      agentToken: a.agentToken, status: a.status, totalGames: a.totalGames, totalScore: a.totalScore,
+      status: a.status, totalGames: a.totalGames, totalScore: a.totalScore,
       tokensEarned: 0, skills: a.skills, avatarUrl: a.avatarUrl, image: a.image,
       trustTier: a.trustTier, reputationScore: a.reputationScore, twitterVerified: a.twitterVerified,
       twitterHandle: a.twitterHandle, clawpumpAgentId: a.clawpumpAgentId, rewardWallet: a.rewardWallet, claimMethod: a.claimMethod,

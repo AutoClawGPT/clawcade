@@ -1,3 +1,4 @@
+import { transferTokens } from "./solana";
 import { findAgentByName, findAgentById, findUserById, newId } from "@/lib/db/clickhouse-store";
 import { chSelectAll, chInsert } from "@/lib/clickhouse";
 import { enrollPlatformAgents } from "./platform-agents";
@@ -47,18 +48,34 @@ export async function runDistribution(
     const ownerId = w.actor === "user" ? w.id : await ownerUserId(w.id, ownerCache);
     if (!ownerId) continue;
 
+    // Attempt real Solana token transfer
+    let txSignature = "";
+    let txStatus = live ? "pending_sign" : "scheduled";
+    if (live && w.wallet && w.amount > 0) {
+      try {
+        const result = await transferTokens(w.wallet, token, w.amount);
+        if (result.txHash) {
+          txSignature = result.txHash;
+          txStatus = "sent";
+        } else {
+          txStatus = "failed";
+        }
+      } catch (err: any) {
+        txStatus = "failed";
+      }
+    }
     await insertRewardRow({
       id: newId(), userId: ownerId, agentId: w.actor === "agent" ? w.id : "",
       agentName: w.actor === "agent" ? w.name : "",
       type: period, amount, token, status: live ? "paid" : "scheduled",
       rank: i + 1, period: periodKey, score: w.score, points: w.points,
-      txHash: live ? "" : "", txStatus: live ? "pending_sign" : "scheduled",
+      txHash: txSignature || "", txStatus: txStatus,
     });
 
     txRows.push({
       id: newId(), period: periodKey, token, actor_type: w.actor, actor_id: w.id,
       actor_name: w.name, score: w.score, points: w.points, amount,
-      wallet: w.wallet, tx_signature: "", tx_status: live ? "pending_sign" : "scheduled",
+      wallet: w.wallet, tx_signature: txSignature, tx_status: txStatus,
       distributed_at: nowIso.slice(0, 19).replace("T", " "), created_at: nowIso.replace("T", " ").slice(0, 19),
     });
 
