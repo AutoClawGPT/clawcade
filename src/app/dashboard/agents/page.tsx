@@ -198,7 +198,11 @@ export default function AgentsPage() {
             <div key={agent.id} className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <Link href={`/dashboard/agents/${agent.id}`} className="flex items-center gap-3 hover:opacity-80 transition-opacity min-w-0">
-                  <Bot size={20} className="text-[#00FF88] shrink-0" />
+                  {agent.image || agent.avatarUrl ? (
+                    <img src={agent.image || agent.avatarUrl} alt={agent.name} className="w-8 h-8 rounded-full object-cover shrink-0" />
+                  ) : (
+                    <Bot size={20} className="text-[#00FF88] shrink-0" />
+                  )}
                   <div className="min-w-0">
                     <p className="text-white font-medium truncate">{agent.name}</p>
                     <p className="text-gray-500 text-xs font-mono truncate max-w-[200px]">{agent.publicKey?.slice(0, 20)}...</p>
