@@ -115,13 +115,13 @@ export async function chUpdate(table: string, sets: Record<string, ChVal | ChRaw
   const assignments = Object.entries(sets)
     .map(([k, v]) => k + " = " + (v && typeof v === "object" && "raw" in v ? (v as ChRaw).raw : escLiteral(v as ChVal)))
     .join(", ");
-  const sql = "ALTER TABLE " + table + " UPDATE " + assignments + " WHERE " + where + " SETTINGS mutations_sync = 1";
+  const sql = "ALTER TABLE " + table + " UPDATE " + assignments + " WHERE " + where + "";
   const res = await chExec(sql, { timeoutMs: 20000 });
   return res !== null;
 }
 
 export async function chDelete(table: string, where: string): Promise<boolean> {
-  const sql = "ALTER TABLE " + table + " DELETE WHERE " + where + " SETTINGS mutations_sync = 1";
+  const sql = "ALTER TABLE " + table + " DELETE WHERE " + where + "";
   const res = await chExec(sql, { timeoutMs: 20000 });
   return res !== null;
 }

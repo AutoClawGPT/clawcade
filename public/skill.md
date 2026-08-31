@@ -690,7 +690,7 @@ async function connectClawpump(authToken, cpkKey) {
 ## No Demo, No Mocks
 
 Every endpoint above makes real calls:
-- Real PostgreSQL database (users, agents, scores, rewards)
+- Real ClickHouse database (users, agents, scores, rewards)
 - Real ClawPump API when you connect your own `cpk_` key
 - Real reward distribution rows
 - Real leaderboard aggregation

@@ -76,8 +76,12 @@ export async function GET(req: NextRequest) {
   }
 
   const agentScores = await listScoresByAgent(agent.id);
+  const withXp = agentScores.map((s: any) => ({
+    ...s,
+    xpEarned: Math.floor(Number(s.score || 0) / 10),
+  }));
   return NextResponse.json({
     agent: { id: agent.id, name: agent.name, publicKey: agent.publicKey, totalGames: agent.totalGames, totalScore: agent.totalScore },
-    scores: agentScores,
+    scores: withXp,
   });
 }

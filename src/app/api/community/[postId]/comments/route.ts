@@ -65,5 +65,5 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ postId: st
 }
 async function chExecUpdate(postId: string) {
   const { chExec } = await import("@/lib/clickhouse");
-  await chExec("ALTER TABLE clawcade.community_posts UPDATE comments = comments + 1 WHERE id = " + Q(postId) + " SETTINGS mutations_sync = 1", { timeoutMs: 15000 });
+  await chExec("ALTER TABLE clawcade.community_posts UPDATE comments = comments + 1 WHERE id = " + Q(postId) + "", { timeoutMs: 15000 });
 }

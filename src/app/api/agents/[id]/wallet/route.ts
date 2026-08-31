@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findUserByAuthToken, findAgentByToken, findAgentById } from "@/lib/db/clickhouse-store";
+import { findUserByAuthToken, findAgentByToken, findAgentById, updateAgentRows } from "@/lib/db/clickhouse-store";
 import { decryptKey } from "@/lib/crypto";
 
 async function resolveActor(req: NextRequest): Promise<{ user?: any; agent?: any } | null> {
@@ -29,12 +29,28 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       return NextResponse.json({ error: "No wallet secret stored for this agent" }, { status: 400 });
     }
 
+    // One-time guard: if already revealed, block repeat access
+    if (agent.walletKeyRevealed) {
+      return NextResponse.json({
+        success: true,
+        wallet: {
+          address: agent.publicKey,
+          privateKey: null,
+          warning: "Private key was already revealed. Contact support to recover.",
+          revealed: true,
+        },
+      });
+    }
+
     let secretKey: string;
     try {
       secretKey = decryptKey(agent.secretKeyEncrypted);
     } catch {
       return NextResponse.json({ error: "Could not decrypt wallet secret" }, { status: 500 });
     }
+
+    // Mark as revealed
+    await updateAgentRows(agent.id, { walletKeyRevealed: 1 });
 
     return NextResponse.json({
       success: true,

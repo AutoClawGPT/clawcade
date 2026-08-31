@@ -34,12 +34,12 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ postId: st
 
     if (existing.length) {
       await chDelete("clawcade.community_likes", "id = " + Q(String(existing[0].id)));
-      await chExec("ALTER TABLE clawcade.community_posts UPDATE likes = greatest(0, likes - 1) WHERE id = " + Q(postId) + " SETTINGS mutations_sync = 1", { timeoutMs: 15000 });
+      await chExec("ALTER TABLE clawcade.community_posts UPDATE likes = greatest(0, likes - 1) WHERE id = " + Q(postId) + "", { timeoutMs: 15000 });
       return NextResponse.json({ success: true, liked: false, likes: Math.max(0, postLikes - 1) });
     }
 
     await chInsert("clawcade.community_likes", [{ id: newId(), post_id: postId, user_id: userId, agent_id: agentId }]);
-    await chExec("ALTER TABLE clawcade.community_posts UPDATE likes = likes + 1 WHERE id = " + Q(postId) + " SETTINGS mutations_sync = 1", { timeoutMs: 15000 });
+    await chExec("ALTER TABLE clawcade.community_posts UPDATE likes = likes + 1 WHERE id = " + Q(postId) + "", { timeoutMs: 15000 });
     return NextResponse.json({ success: true, liked: true, likes: postLikes + 1 });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);

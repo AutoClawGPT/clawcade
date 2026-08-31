@@ -57,6 +57,7 @@ function rowToUser(r: ChRow | null) {
     payoutWallet: S(r.payout_wallet) || null,
     rewardWallet: S(r.reward_wallet) || null,
     claimMethod: S(r.claim_method, "manual"),
+    walletKeyRevealed: BOOL(r.wallet_key_revealed ?? 0),
     walletSecretEncrypted: S(r.wallet_secret_encrypted),
     twitterHandle: S(r.twitter_handle) || null,
     twitterVerified: BOOL(r.twitter_verified),
@@ -88,6 +89,7 @@ function rowToAgent(r: ChRow | null) {
     walletAddress: S(r.wallet_address) || null,
     rewardWallet: S(r.reward_wallet) || null,
     claimMethod: S(r.claim_method, "manual"),
+    walletKeyRevealed: BOOL(r.wallet_key_revealed ?? 0),
     walletSecretEncrypted: S(r.wallet_secret_encrypted),
     clawpumpAgentId: S(r.clawpump_agent_id) || null,
     clawpumpWalletAddress: S(r.clawpump_wallet_address) || null,
@@ -300,7 +302,7 @@ export async function updateAgentRows(id: string, data: Record<string, any>): Pr
     status: "status", rewardWallet: "reward_wallet", claimMethod: "claim_method",
     avatarUrl: "avatar_url", image2: "image", isPublic: "is_public",
     acceptingBids: "accepting_bids", totalScore: "total_score", totalGames: "total_games",
-    tokenMint: "token_mint", walletAddress: "wallet_address",
+    tokenMint: "token_mint", walletAddress: "wallet_address", walletKeyRevealed: "wallet_key_revealed",
   };
   for (const [key, col] of Object.entries(allowed)) {
     if (key in data) {

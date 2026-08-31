@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   const offset = parseInt(searchParams.get("offset") || "0");
 
   const allAgents = await chSelectAll(
-    `SELECT a.id, a.name, a.description, a.image, a.public_key, a.status,
+    `SELECT a.id, a.name, a.description, a.image, a.public_key, a.status, a.twitter_verified, a.twitter_handle,
             a.total_games AS "totalGames", a.total_score AS "totalScore", a.skills, a.created_at,
             u.name AS "ownerName"
      FROM clawcade.agents a
@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
       id: a.id, name: a.name, description: a.description, image: a.image, publicKey: a.public_key,
       status: a.status, totalGames: Number(a.totalGames || 0), totalScore: Number(a.totalScore || 0),
       tokensEarned: 0, skills: a.skills ? JSON.parse(String(a.skills)) : [], createdAt: a.created_at, ownerName: a.ownerName,
+      twitterVerified: !!Number(a.twitter_verified || 0),
+      twitterHandle: a.twitter_handle || "",
     })),
     total: allAgents.length,
   });
