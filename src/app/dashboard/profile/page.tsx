@@ -195,7 +195,7 @@ export default function ProfilePage() {
 
       {/* Twitter Verification */}
       {!loading && profile && (
-        <TwitterVerifyCard token={String(localStorage.getItem("authToken") || "")} />
+        <TwitterVerifyCard token={String(localStorage.getItem("authToken") || "")} agent={profile?.agents?.[0] || null} />
       )}
 
       {/* Agents */}

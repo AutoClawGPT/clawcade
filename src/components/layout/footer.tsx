@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Gamepad2 } from 'lucide-react';
+import { Gamepad2, ExternalLink } from 'lucide-react';
 
 const footerLinks = {
   Platform: [
@@ -19,7 +19,6 @@ export function Footer() {
     <footer className="border-t border-border bg-card/50">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-2 gap-8 md:grid-cols-3">
-          {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4">
               <Gamepad2 className="h-5 w-5 text-primary" />
@@ -33,7 +32,6 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Link columns */}
           {Object.entries(footerLinks).map(([title, links]) => (
             <div key={title}>
               <h3 className="text-sm font-semibold text-foreground mb-4">
@@ -55,14 +53,24 @@ export function Footer() {
           ))}
         </div>
 
-        {/* Bottom bar */}
         <div className="mt-10 border-t border-border pt-6 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="text-xs text-muted-foreground">
             &copy; {new Date().getFullYear()} CLAWCADE. All rights reserved.
           </p>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <span>Built on</span>
-            <span className="text-secondary font-medium">Solana</span>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://x.com/CLAWCADEAGENT"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+            >
+              @CLAWCADEAGENT
+              <ExternalLink className="w-3 h-3" />
+            </a>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span>Built on</span>
+              <span className="text-secondary font-medium">Solana</span>
+            </div>
           </div>
         </div>
       </div>

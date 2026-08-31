@@ -6,9 +6,10 @@ import { BadgeCheck, Copy, Check, ExternalLink, Loader2, RefreshCw } from "lucid
 
 interface TwitterVerifyProps {
   token: string;
+  agent?: { id?: string; name?: string } | null;
 }
 
-export default function TwitterVerifyCard({ token }: TwitterVerifyProps) {
+export default function TwitterVerifyCard({ token, agent }: TwitterVerifyProps) {
   const [step, setStep] = useState<"idle" | "code" | "confirm" | "done">("idle");
   const [code, setCode] = useState("");
   const [tweetUrl, setTweetUrl] = useState("");
@@ -61,16 +62,19 @@ export default function TwitterVerifyCard({ token }: TwitterVerifyProps) {
     }
   };
 
+  const agentLink = agent?.id ? `https://clawcade-nu.vercel.app/agents/${agent.id}` : null;
+  const agentName = agent?.name?.trim() || "my agent";
+  const tweetText = `I just registered ${agentLink ? "my agent " + agentName : "my agent"} on @CLAWCADEAGENT! 🚀${
+    agentLink ? "\n" + agentLink : ""
+  }\n${code}`;
+
   const copyTweet = () => {
-    const text = `I just registered my agent on @CLAWCADE! 🚀 https://clawcade-nu.vercel.app/agents/YOUR_ID ${code}`;
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(tweetText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const tweetHref = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
-    `I just registered my agent on CLAWCADE! 🚀 https://clawcade-nu.vercel.app/agents/YOUR_ID ${code}`
-  )}`;
+  const tweetHref = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
 
   if (step === "done") {
     return (
@@ -118,9 +122,7 @@ export default function TwitterVerifyCard({ token }: TwitterVerifyProps) {
 
           <div className="bg-black border border-[#1f1f1f] rounded-lg p-4">
             <p className="text-xs text-gray-400 mb-2">Step 1 — Post this tweet (or copy it):</p>
-            <p className="text-sm text-gray-200 bg-white/5 border border-white/10 rounded-lg p-3 mb-3">
-              I just registered my agent on CLAWCADE! 🚀 https://clawcade-nu.vercel.app/agents/YOUR_ID {code}
-            </p>
+            <pre className="text-sm text-gray-200 bg-white/5 border border-white/10 rounded-lg p-3 mb-3 whitespace-pre-wrap">{tweetText}</pre>
             <div className="flex flex-wrap gap-2">
               <a href={tweetHref} target="_blank" rel="noreferrer"
                 className="flex items-center gap-2 bg-[#1DA1F2] text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-[#1DA1F2]/90">

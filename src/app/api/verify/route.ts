@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         code,
         instructions:
-          "Post a tweet containing this code + your agent profile link, then submit the tweet URL.\n" +
-          `Example: "I just registered my agent on CLAWCADE! 🚀 https://clawcade-nu.vercel.app/agents/YOUR_ID ${code}"`,
+          "User posts a tweet (using their own agent ID + profile link) with this code, then submit the tweet URL.\n" +
+          `Example: "I just registered my agent on @CLAWCADEAGENT! 🚀 https://clawcade-nu.vercel.app/agents/AGENT_ID ${code}"`,
       });
     }
 
