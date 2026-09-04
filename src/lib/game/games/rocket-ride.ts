@@ -172,9 +172,9 @@ export function createRocketRide(engine: GameEngine) {
     }
 
     // Drag / touch aim
-    if (inp.mouse.down || inp.touches.length > 0) {
-      const px = inp.touches.length > 0 ? inp.touches[0].x : inp.mouse.x;
-      const py = inp.touches.length > 0 ? inp.touches[0].y : inp.mouse.y;
+    if (inp.mouseDown || inp.touches.length > 0) {
+      const px = inp.touches.length > 0 ? inp.touches[0].x : inp.mouseX;
+      const py = inp.touches.length > 0 ? inp.touches[0].y : inp.mouseY;
       const dx = px - player.x;
       const dy = py - player.y;
       if (Math.abs(dx) > 8) targetVx += Math.max(-moveSpeed, Math.min(moveSpeed, dx * 0.012));
@@ -261,7 +261,7 @@ export function createRocketRide(engine: GameEngine) {
         hitStop = 90;
         engine.sound.play('die');
         engine.spawnParticle(player.x, player.y, '#ef4444', 28);
-        engine.feedback('heavy', player.x, player.y, '#ef4444');
+        engine.feedback('large', player.x, player.y, '#ef4444');
         engine.gameOver();
         return;
       }
@@ -298,7 +298,7 @@ export function createRocketRide(engine: GameEngine) {
           engine.addScore(25);
           engine.sound.play('collect');
           engine.spawnParticle(c.x, c.y, '#22c55e', 12);
-          engine.feedback('light', c.x, c.y, '#22c55e');
+          engine.feedback('small', c.x, c.y, '#22c55e');
         } else {
           engine.addScore(80);
           engine.sound.play('powerup');
