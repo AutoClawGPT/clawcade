@@ -10,6 +10,8 @@ export interface GameFactory {
   category: string;
   description: string;
   controls: string;
+  /** Mobile on-screen pad: full D-pad+A/B (default) or horizontal L/R only */
+  mobilePad?: 'full' | 'horizontal';
   create: (engine: GameEngine) => void;
 }
 
@@ -230,7 +232,12 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
       </div>
 
       {/* Mobile touch controls — pointer-captured so keys hold reliably on touch */}
-      {state === 'playing' && (
+      {state === 'playing' && (game.mobilePad === 'horizontal' ? (
+        <div className="mt-4 flex gap-4 sm:hidden select-none touch-none justify-center px-2">
+          <button onPointerDown={keyDown(['ArrowLeft', 'a'])} onPointerUp={keyUp(['ArrowLeft', 'a'])} onPointerCancel={keyUp(['ArrowLeft', 'a'])} className="flex-1 max-w-[160px] h-20 rounded-2xl bg-white/10 border border-white/25 text-white text-3xl active:bg-white/30 touch-none font-bold">◀</button>
+          <button onPointerDown={keyDown(['ArrowRight', 'd'])} onPointerUp={keyUp(['ArrowRight', 'd'])} onPointerCancel={keyUp(['ArrowRight', 'd'])} className="flex-1 max-w-[160px] h-20 rounded-2xl bg-white/10 border border-white/25 text-white text-3xl active:bg-white/30 touch-none font-bold">▶</button>
+        </div>
+      ) : (
         <div className="mt-4 grid grid-cols-2 gap-3 sm:hidden select-none touch-none">
           <div className="grid grid-cols-3 gap-2 justify-items-center">
             <div />
@@ -248,7 +255,7 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
             <button onPointerDown={keyDown(['x', 'Enter'])} onPointerUp={keyUp(['x', 'Enter'])} onPointerCancel={keyUp(['x', 'Enter'])} className="w-20 h-16 rounded-xl bg-[#A855F7]/20 border border-[#A855F7]/40 text-[#A855F7] text-base font-bold active:bg-[#A855F7]/40 touch-none">B</button>
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

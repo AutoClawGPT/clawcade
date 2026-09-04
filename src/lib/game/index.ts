@@ -45,7 +45,8 @@ export const GAMES: GameFactory[] = [
     name: 'Rocket Ride',
     category: 'runner',
     description: 'Ride the rocket to the moon! Dodge FUD clouds and bear candles. Collect green candles for points and boosts.',
-    controls: 'Arrow keys / A+D to steer',
+    controls: '← → / A D to steer · drag/touch toward where you want to go',
+    mobilePad: 'horizontal',
     create: createRocketRide,
   },
 ];
