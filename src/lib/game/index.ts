@@ -13,7 +13,7 @@ export const GAMES: GameFactory[] = [
     name: 'Crypto Smash',
     category: 'action',
     description: 'Punch and kick rug-pull scammers! Combo attacks for bonus points. Watch out for honeypots and dumpster fires.',
-    controls: '←→ / A D to move • Z to attack (both sides) • X to throw projectile • Up/W to jump',
+    controls: '←→ / A D to move • Z to attack (facing) • X projectile • Up/W to jump (tap)',
     create: createCryptoSmash,
   },
   {
@@ -37,7 +37,7 @@ export const GAMES: GameFactory[] = [
     name: 'Cascade',
     category: 'puzzle',
     description: 'Match 3+ crypto symbols to clear them! Chain combos for massive multipliers. How high can your score go?',
-    controls: 'Arrow keys to move cursor • Z/Enter to select & swap',
+    controls: 'Tap/click select→swap • Arrows move cursor • Z select • Enter swap',
     create: createCascade,
   },
   {

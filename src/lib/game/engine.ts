@@ -30,15 +30,28 @@ export interface Particle {
   maxLife: number;
   color: string;
   size: number;
+  active: boolean;
 }
 
 export interface InputState {
   keys: Set<string>;
+  /** Keys that transitioned down this frame (edge) */
+  keysJustPressed: Set<string>;
+  /** Keys that transitioned up this frame */
+  keysJustReleased: Set<string>;
   mouseX: number;
   mouseY: number;
   mouseDown: boolean;
+  /** True only on the frame mouse went down */
+  mouseJustPressed: boolean;
+  /** True only on the frame mouse went up */
+  mouseJustReleased: boolean;
   touches: { x: number; y: number; id: number }[];
+  /** True when a new touch started this frame */
+  touchJustPressed: boolean;
 }
+
+export type FeedbackTier = 'small' | 'medium' | 'large';
 
 export interface GameConfig {
   canvas: HTMLCanvasElement;
@@ -59,6 +72,16 @@ class SoundEngine {
   private getCtx(): AudioContext {
     if (!this.ctx) this.ctx = new AudioContext();
     return this.ctx;
+  }
+
+  /** Call from a user gesture (Start click) so browsers unmute audio */
+  resume() {
+    try {
+      const ctx = this.getCtx();
+      if (ctx.state === 'suspended') void ctx.resume();
+    } catch {
+      // Audio may not be available
+    }
   }
 
   play(type: 'hit' | 'collect' | 'die' | 'powerup' | 'shoot' | 'explosion' | 'combo') {
@@ -177,6 +200,8 @@ export interface MoveEntry {
   y?: number;
 }
 
+const MAX_PARTICLES = 200;
+
 export class GameEngine {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
@@ -189,11 +214,16 @@ export class GameEngine {
   sound: SoundEngine;
   input: InputState;
   particles: Particle[] = [];
+  private particlePool: Particle[] = [];
   moves: MoveEntry[] = [];
-  // Juice: screen shake + hit-stop (freeze frames)
-  private shakeTime = 0;
+  // Juice: trauma-based screen shake + hit-stop (freeze frames)
+  private trauma = 0;
+  private traumaDecay = 1.4; // per second
+  private shakeTime = 0; // legacy compat decay window
   private shakePower = 0;
+  private shakePhase = 0;
   private freezeUntil = 0;
+  private reduceShake = false;
 
   private rafId: number = 0;
   private lastTs: number = 0;
@@ -210,6 +240,13 @@ export class GameEngine {
   private boundTouchM = this.onTouchMove.bind(this);
   private boundBlur = this.onWindowBlur.bind(this);
 
+  /** Keys pressed since last frame (queued until consumed in loop) */
+  private pendingJustPressed = new Set<string>();
+  private pendingJustReleased = new Set<string>();
+  private pendingMouseJustPressed = false;
+  private pendingMouseJustReleased = false;
+  private pendingTouchJustPressed = false;
+
   onScoreChange?: (s: number) => void;
   onStateChange?: (s: GameState) => void;
   onTimeChange?: (t: number) => void;
@@ -225,10 +262,28 @@ export class GameEngine {
     if (dpr > 1) this.ctx.scale(dpr, dpr);
     this.rng = new SeededRNG(config.seed ?? Date.now());
     this.sound = new SoundEngine();
-    this.input = { keys: new Set(), mouseX: 0, mouseY: 0, mouseDown: false, touches: [] };
+    this.input = {
+      keys: new Set(),
+      keysJustPressed: new Set(),
+      keysJustReleased: new Set(),
+      mouseX: 0,
+      mouseY: 0,
+      mouseDown: false,
+      mouseJustPressed: false,
+      mouseJustReleased: false,
+      touches: [],
+      touchJustPressed: false,
+    };
     this.onScoreChange = config.onScoreChange;
     this.onStateChange = config.onStateChange;
     this.onTimeChange = config.onTimeChange;
+    try {
+      if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+        this.reduceShake = true;
+      }
+    } catch {
+      // ignore
+    }
   }
 
   // --- Lifecycle ---
@@ -237,11 +292,20 @@ export class GameEngine {
     this.score = 0;
     this.time = 0;
     this.particles = [];
+    this.particlePool = [];
     this.moves = [];
+    this.trauma = 0;
     this.shakeTime = 0;
     this.shakePower = 0;
+    this.shakePhase = 0;
     this.freezeUntil = 0;
     this.lastTs = 0;
+    this.pendingJustPressed.clear();
+    this.pendingJustReleased.clear();
+    this.pendingMouseJustPressed = false;
+    this.pendingMouseJustReleased = false;
+    this.pendingTouchJustPressed = false;
+    this.sound.resume();
     this.emit();
     this.attachInput();
     window.addEventListener('blur', this.boundBlur);
@@ -253,6 +317,8 @@ export class GameEngine {
     this.detachInput();
     window.removeEventListener('blur', this.boundBlur);
     this.input.keys.clear();
+    this.input.keysJustPressed.clear();
+    this.input.keysJustReleased.clear();
     cancelAnimationFrame(this.rafId);
     this.emit();
   }
@@ -298,6 +364,26 @@ export class GameEngine {
     this.renderFrame = cb;
   }
 
+  /** Edge: true if key went down since last frame */
+  justPressed(key: string): boolean {
+    return this.input.keysJustPressed.has(key);
+  }
+
+  /** True while key is held */
+  held(key: string): boolean {
+    return this.input.keys.has(key);
+  }
+
+  /** Any of the listed keys just pressed */
+  justPressedAny(...keys: string[]): boolean {
+    return keys.some((k) => this.input.keysJustPressed.has(k));
+  }
+
+  /** Any of the listed keys currently held */
+  heldAny(...keys: string[]): boolean {
+    return keys.some((k) => this.input.keys.has(k));
+  }
+
   // --- Game loop ---
   private loop(ts: number) {
     if (this.state !== 'playing') return;
@@ -312,6 +398,20 @@ export class GameEngine {
     this.time += dt;
     this.onTimeChange?.(this.time);
 
+    // Promote pending edges → this-frame edges
+    this.input.keysJustPressed.clear();
+    this.input.keysJustReleased.clear();
+    for (const k of this.pendingJustPressed) this.input.keysJustPressed.add(k);
+    for (const k of this.pendingJustReleased) this.input.keysJustReleased.add(k);
+    this.pendingJustPressed.clear();
+    this.pendingJustReleased.clear();
+    this.input.mouseJustPressed = this.pendingMouseJustPressed;
+    this.input.mouseJustReleased = this.pendingMouseJustReleased;
+    this.input.touchJustPressed = this.pendingTouchJustPressed;
+    this.pendingMouseJustPressed = false;
+    this.pendingMouseJustReleased = false;
+    this.pendingTouchJustPressed = false;
+
     // Update particles + shake decay
     this.updateParticles(dt);
     this.updateShake(dt);
@@ -319,11 +419,15 @@ export class GameEngine {
     // Game-specific update
     this.animFrame?.(dt);
 
-    // Shake transform (scaled slightly to hide edges)
-    const hasShake = this.shakeTime > 0 && this.shakePower > 0;
+    // Trauma shake transform (camera only — never bodies)
+    const shakeAmt = this.reduceShake ? this.trauma * this.trauma * 0.35 : this.trauma * this.trauma;
+    const hasShake = shakeAmt > 0.001;
     if (hasShake) {
-      const shx = (Math.random() * 2 - 1) * this.shakePower;
-      const shy = (Math.random() * 2 - 1) * this.shakePower;
+      this.shakePhase += dt * 0.03;
+      const maxOx = 14;
+      const maxOy = 10;
+      const shx = maxOx * shakeAmt * Math.sin(this.shakePhase * 1.7);
+      const shy = maxOy * shakeAmt * Math.sin(this.shakePhase * 2.3);
       this.ctx.save();
       this.ctx.translate(this.width / 2, this.height / 2);
       this.ctx.scale(1.015, 1.015);
@@ -337,29 +441,59 @@ export class GameEngine {
 
     if (hasShake) this.ctx.restore();
 
+    // Clear one-frame edges after game update+render
+    this.input.keysJustPressed.clear();
+    this.input.keysJustReleased.clear();
+    this.input.mouseJustPressed = false;
+    this.input.mouseJustReleased = false;
+    this.input.touchJustPressed = false;
+
     this.rafId = requestAnimationFrame(this.boundLoop);
   }
 
-  // --- Particles ---
+  // --- Particles (pooled) ---
+  private allocParticle(): Particle {
+    const pooled = this.particlePool.pop();
+    if (pooled) {
+      pooled.active = true;
+      return pooled;
+    }
+    return { x: 0, y: 0, vx: 0, vy: 0, life: 1, maxLife: 0.5, color: '#fff', size: 3, active: true };
+  }
+
+  private releaseParticle(p: Particle) {
+    p.active = false;
+    if (this.particlePool.length < MAX_PARTICLES) this.particlePool.push(p);
+  }
+
   spawnParticle(x: number, y: number, color: string, count = 5) {
-    for (let i = 0; i < count; i++) {
+    const room = Math.max(0, MAX_PARTICLES - this.particles.length);
+    const n = Math.min(count, room);
+    for (let i = 0; i < n; i++) {
       const angle = this.rng.range(0, Math.PI * 2);
       const speed = this.rng.range(30, 120);
-      this.particles.push({
-        x,
-        y,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 1,
-        maxLife: this.rng.range(0.3, 0.8),
-        color,
-        size: this.rng.range(2, 6),
-      });
+      const p = this.allocParticle();
+      p.x = x;
+      p.y = y;
+      p.vx = Math.cos(angle) * speed;
+      p.vy = Math.sin(angle) * speed;
+      p.life = 1;
+      p.maxLife = this.rng.range(0.3, 0.8);
+      p.color = color;
+      p.size = this.rng.range(2, 6);
+      this.particles.push(p);
     }
   }
 
-  /** Screen shake — call on hits/explosions */
+  /** Add trauma (0..1). Hits ADD; they don't reset. */
+  addTrauma(amount: number) {
+    this.trauma = Math.min(1, this.trauma + amount);
+  }
+
+  /** Screen shake — call on hits/explosions (adds trauma + short legacy window) */
   shake(power: number, durationMs: number) {
+    // Map legacy power (~2–10) into trauma 0..1
+    this.addTrauma(Math.min(1, power / 12));
     this.shakePower = Math.max(this.shakePower, power);
     this.shakeTime = Math.max(this.shakeTime, durationMs);
   }
@@ -369,7 +503,39 @@ export class GameEngine {
     this.freezeUntil = Math.max(this.freezeUntil, performance.now() + ms);
   }
 
+  /**
+   * Layered feedback preset by importance tier.
+   * small: soft collect; medium: hit/kill; large: death/boss/clear
+   */
+  feedback(tier: FeedbackTier, x?: number, y?: number, color = '#fbbf24') {
+    const cx = x ?? this.width / 2;
+    const cy = y ?? this.height / 2;
+    switch (tier) {
+      case 'small':
+        this.sound.play('collect');
+        this.spawnParticle(cx, cy, color, 4);
+        this.addTrauma(0.08);
+        break;
+      case 'medium':
+        this.sound.play('hit');
+        this.spawnParticle(cx, cy, color, 8);
+        this.addTrauma(0.22);
+        this.hitStop(40);
+        break;
+      case 'large':
+        this.sound.play('explosion');
+        this.spawnParticle(cx, cy, color, 16);
+        this.addTrauma(0.45);
+        this.hitStop(70);
+        break;
+    }
+  }
+
   private updateShake(dt: number) {
+    const sDt = dt / 1000;
+    if (this.trauma > 0) {
+      this.trauma = Math.max(0, this.trauma - this.traumaDecay * sDt);
+    }
     if (this.shakeTime > 0) {
       this.shakeTime -= dt;
       if (this.shakeTime <= 0) this.shakePower = 0;
@@ -383,7 +549,10 @@ export class GameEngine {
       p.x += p.vx * sDt;
       p.y += p.vy * sDt;
       p.life -= sDt / p.maxLife;
-      if (p.life <= 0) this.particles.splice(i, 1);
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+        this.releaseParticle(p);
+      }
     }
   }
 
@@ -421,6 +590,34 @@ export class GameEngine {
     return dx * dx + dy * dy < c.r * c.r;
   }
 
+  /** Map CSS-rect pointer coords → logical canvas coords */
+  private scalePointer(clientX: number, clientY: number): { x: number; y: number } {
+    const r = this.canvas.getBoundingClientRect();
+    const sx = r.width > 0 ? this.width / r.width : 1;
+    const sy = r.height > 0 ? this.height / r.height : 1;
+    return {
+      x: (clientX - r.left) * sx,
+      y: (clientY - r.top) * sy,
+    };
+  }
+
+  /** Mobile / UI: simulate a key press (sets held + justPressed edge) */
+  simulateKeyDown(key: string) {
+    if (!this.input.keys.has(key)) {
+      this.pendingJustPressed.add(key);
+      this.logMove(`kd:${key}`);
+    }
+    this.input.keys.add(key);
+  }
+
+  /** Mobile / UI: simulate a key release */
+  simulateKeyUp(key: string) {
+    if (this.input.keys.has(key)) {
+      this.pendingJustReleased.add(key);
+    }
+    this.input.keys.delete(key);
+  }
+
   // --- Input ---
   private attachInput() {
     window.addEventListener('keydown', this.boundKeyD);
@@ -445,57 +642,76 @@ export class GameEngine {
   }
 
   private onKeyDown(e: KeyboardEvent) {
+    if (e.repeat) return; // ignore OS key-repeat → edge only on first press
+    const wasHeld = this.input.keys.has(e.key);
     this.input.keys.add(e.key);
-    this.logMove('kd', undefined, undefined);
+    if (!wasHeld) {
+      this.pendingJustPressed.add(e.key);
+      this.logMove(`kd:${e.key}`);
+    }
   }
   private onKeyUp(e: KeyboardEvent) {
     this.input.keys.delete(e.key);
+    this.pendingJustReleased.add(e.key);
   }
   private onMouseDown(e: MouseEvent) {
     this.input.mouseDown = true;
-    const r = this.canvas.getBoundingClientRect();
-    this.input.mouseX = e.clientX - r.left;
-    this.input.mouseY = e.clientY - r.top;
+    this.pendingMouseJustPressed = true;
+    const p = this.scalePointer(e.clientX, e.clientY);
+    this.input.mouseX = p.x;
+    this.input.mouseY = p.y;
   }
   private onMouseUp() {
     this.input.mouseDown = false;
+    this.pendingMouseJustReleased = true;
   }
   private onMouseMove(e: MouseEvent) {
-    const r = this.canvas.getBoundingClientRect();
-    this.input.mouseX = e.clientX - r.left;
-    this.input.mouseY = e.clientY - r.top;
+    const p = this.scalePointer(e.clientX, e.clientY);
+    this.input.mouseX = p.x;
+    this.input.mouseY = p.y;
   }
 
   // Clear all held keys when the window loses focus (prevents "stuck" buttons)
   private onWindowBlur() {
     this.input.keys.clear();
+    this.pendingJustPressed.clear();
+    this.pendingJustReleased.clear();
   }
   private onTouchStart(e: TouchEvent) {
     e.preventDefault();
-    const r = this.canvas.getBoundingClientRect();
-    this.input.touches = Array.from(e.touches).map((t) => ({
-      x: t.clientX - r.left,
-      y: t.clientY - r.top,
-      id: t.identifier,
-    }));
+    this.pendingTouchJustPressed = true;
+    this.input.touches = Array.from(e.touches).map((t) => {
+      const p = this.scalePointer(t.clientX, t.clientY);
+      return { x: p.x, y: p.y, id: t.identifier };
+    });
+    if (this.input.touches.length > 0) {
+      this.input.mouseX = this.input.touches[0].x;
+      this.input.mouseY = this.input.touches[0].y;
+      this.input.mouseDown = true;
+      this.pendingMouseJustPressed = true;
+    }
   }
   private onTouchEnd(e: TouchEvent) {
     e.preventDefault();
-    const r = this.canvas.getBoundingClientRect();
-    this.input.touches = Array.from(e.touches).map((t) => ({
-      x: t.clientX - r.left,
-      y: t.clientY - r.top,
-      id: t.identifier,
-    }));
+    this.input.touches = Array.from(e.touches).map((t) => {
+      const p = this.scalePointer(t.clientX, t.clientY);
+      return { x: p.x, y: p.y, id: t.identifier };
+    });
+    if (this.input.touches.length === 0) {
+      this.input.mouseDown = false;
+      this.pendingMouseJustReleased = true;
+    }
   }
   private onTouchMove(e: TouchEvent) {
     e.preventDefault();
-    const r = this.canvas.getBoundingClientRect();
-    this.input.touches = Array.from(e.touches).map((t) => ({
-      x: t.clientX - r.left,
-      y: t.clientY - r.top,
-      id: t.identifier,
-    }));
+    this.input.touches = Array.from(e.touches).map((t) => {
+      const p = this.scalePointer(t.clientX, t.clientY);
+      return { x: p.x, y: p.y, id: t.identifier };
+    });
+    if (this.input.touches.length > 0) {
+      this.input.mouseX = this.input.touches[0].x;
+      this.input.mouseY = this.input.touches[0].y;
+    }
   }
 
   private emit() {

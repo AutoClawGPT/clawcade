@@ -7,15 +7,29 @@ export function createSwarm(engine: GameEngine) {
   const W = engine.width;
   const H = engine.height;
 
-  const player = { x: W / 2, y: H / 2, r: 15, speed: 3, attackCd: 0, attackRange: 80 };
+  const player = {
+    x: W / 2,
+    y: H / 2,
+    r: 15,
+    speed: 3,
+    attackCd: 0,
+    attackRange: 80,
+    hp: 5,
+    maxHp: 5,
+    iFrames: 0,
+  };
   interface Enemy { x: number; y: number; r: number; speed: number; hp: number; color: string; flash: number }
   const enemies: Enemy[] = [];
+  const projectiles: { x: number; y: number; vx: number; vy: number; life: number; dmg: number }[] = [];
   let kills = 0;
   let spawnTimer = 0;
   let difficulty = 1;
   let level = 1;
+  let xp = 0;
   let xpToNext = 10;
   let weaponLevel = 1;
+  let levelUpFlash = 0;
+  let levelUpAura = 0;
 
   function spawnEnemy() {
     const side = engine.rng.intRange(0, 3);
@@ -42,11 +56,31 @@ export function createSwarm(engine: GameEngine) {
     });
   }
 
+  function tryLevelUp() {
+    while (xp >= xpToNext) {
+      xp -= xpToNext;
+      level++;
+      weaponLevel = Math.min(5, Math.floor(level / 2) + 1);
+      player.attackRange = 80 + level * 5;
+      xpToNext = Math.floor(10 * Math.pow(1.45, level - 1));
+      levelUpFlash = 1.2;
+      levelUpAura = 1.5;
+      engine.sound.play('powerup');
+      engine.spawnParticle(player.x, player.y, '#a78bfa', 18);
+      engine.addTrauma(0.25);
+      engine.hitStop(50);
+    }
+  }
+
   engine.onUpdate((dt) => {
     const sDt = dt / 1000;
     const inp = engine.input;
-    if (inp.keys.has('p') || inp.keys.has('P')) { engine.pause(); return; }
-    if (inp.keys.has('r') || inp.keys.has('R')) { engine.stop(); engine.start(); return; }
+    if (engine.justPressedAny('p', 'P')) { engine.pause(); return; }
+    if (engine.justPressedAny('r', 'R')) { engine.stop(); engine.start(); return; }
+
+    levelUpFlash = Math.max(0, levelUpFlash - sDt);
+    levelUpAura = Math.max(0, levelUpAura - sDt);
+    player.iFrames = Math.max(0, player.iFrames - dt);
 
     // Player movement
     let dx = 0, dy = 0;
@@ -99,7 +133,6 @@ export function createSwarm(engine: GameEngine) {
         projectiles.splice(i, 1);
         continue;
       }
-      // Hit enemies
       for (let j = enemies.length - 1; j >= 0; j--) {
         const e = enemies[j];
         if (Math.hypot(p.x - e.x, p.y - e.y) < e.r + 4) {
@@ -109,17 +142,12 @@ export function createSwarm(engine: GameEngine) {
           projectiles.splice(i, 1);
           if (e.hp <= 0) {
             kills++;
+            xp += 1;
             engine.addScore(10);
+            engine.feedback('small', e.x, e.y, e.color);
             engine.sound.play('explosion');
-            engine.spawnParticle(e.x, e.y, e.color, 10);
             enemies.splice(j, 1);
-            // Level up
-            if (kills % xpToNext === 0) {
-              level++;
-              weaponLevel = Math.min(5, Math.floor(level / 2) + 1);
-              player.attackRange = 80 + level * 5;
-              xpToNext = Math.floor(xpToNext * 1.5);
-            }
+            tryLevelUp();
           }
           break;
         }
@@ -128,11 +156,12 @@ export function createSwarm(engine: GameEngine) {
 
     // Spawn enemies
     spawnTimer -= dt;
-    difficulty = 1 + engine.time / 30000; // increases every 30s
+    difficulty = 1 + engine.time / 30000;
     if (spawnTimer <= 0) {
       spawnTimer = Math.max(200, 1500 - engine.time / 100);
       const count = Math.floor(1 + difficulty * 0.5);
-      for (let i = 0; i < count; i++) spawnEnemy();
+      const cap = 40;
+      for (let i = 0; i < count && enemies.length < cap; i++) spawnEnemy();
     }
 
     // Update enemies
@@ -147,38 +176,34 @@ export function createSwarm(engine: GameEngine) {
       }
       e.flash = Math.max(0, e.flash - sDt);
 
-      // Hit player
-      if (dist < player.r + e.r) {
+      // Hit player — real HP + i-frames
+      if (dist < player.r + e.r && player.iFrames <= 0) {
+        player.hp -= 1;
+        player.iFrames = 1000;
         engine.sound.play('hit');
         engine.spawnParticle(player.x, player.y, '#fbbf24', 8);
         engine.shake(5, 140);
         engine.hitStop(60);
         enemies.splice(i, 1);
-        // Player takes damage = lose score and brief invuln
-        engine.addScore(-5);
-        if (engine.score <= 0) {
+        if (player.hp <= 0) {
           engine.gameOver();
           return;
         }
       }
     }
 
-    // Score = time survived
+    // Score = time survived (causal)
     if (Math.floor(engine.time / 1000) > Math.floor((engine.time - dt) / 1000)) {
       engine.addScore(1);
     }
   });
 
-  const projectiles: { x: number; y: number; vx: number; vy: number; life: number; dmg: number }[] = [];
-
   engine.onRender(() => {
     const ctx = engine.ctx;
 
-    // Background
     ctx.fillStyle = '#0f0f23';
     ctx.fillRect(0, 0, W, H);
 
-    // Grid
     ctx.strokeStyle = '#1a1a3e';
     ctx.lineWidth = 1;
     for (let x = 0; x < W; x += 30) {
@@ -188,7 +213,6 @@ export function createSwarm(engine: GameEngine) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
 
-    // Projectiles
     ctx.fillStyle = '#22d3ee';
     for (const p of projectiles) {
       ctx.beginPath();
@@ -196,7 +220,6 @@ export function createSwarm(engine: GameEngine) {
       ctx.fill();
     }
 
-    // Enemies
     for (const e of enemies) {
       ctx.save();
       if (e.flash > 0) ctx.globalAlpha = 0.5;
@@ -204,7 +227,6 @@ export function createSwarm(engine: GameEngine) {
       ctx.beginPath();
       ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
       ctx.fill();
-      // Enemy eyes
       ctx.fillStyle = '#fff';
       ctx.beginPath();
       ctx.arc(e.x - e.r * 0.3, e.y - e.r * 0.2, e.r * 0.2, 0, Math.PI * 2);
@@ -213,12 +235,22 @@ export function createSwarm(engine: GameEngine) {
       ctx.restore();
     }
 
-    // Player
+    // Level-up aura
+    if (levelUpAura > 0) {
+      ctx.strokeStyle = `rgba(167, 139, 250, ${Math.min(1, levelUpAura)})`;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r + 10 + (1.5 - levelUpAura) * 30, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    // Player (blink during i-frames)
+    ctx.save();
+    if (player.iFrames > 0 && Math.floor(player.iFrames / 80) % 2 === 0) ctx.globalAlpha = 0.35;
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
     ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
     ctx.fill();
-    // Cat ears
     ctx.beginPath();
     ctx.moveTo(player.x - 8, player.y - 12);
     ctx.lineTo(player.x - 14, player.y - 24);
@@ -229,14 +261,13 @@ export function createSwarm(engine: GameEngine) {
     ctx.lineTo(player.x + 14, player.y - 24);
     ctx.lineTo(player.x + 1, player.y - 15);
     ctx.fill();
-    // Eyes
     ctx.fillStyle = '#000';
     ctx.beginPath();
     ctx.arc(player.x - 4, player.y - 3, 2, 0, Math.PI * 2);
     ctx.arc(player.x + 4, player.y - 3, 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
 
-    // Attack range indicator
     ctx.strokeStyle = '#22d3ee33';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -250,6 +281,28 @@ export function createSwarm(engine: GameEngine) {
     ctx.fillText(`Kills: ${kills}`, 20, 20);
     ctx.fillText(`Level: ${level}`, 20, 40);
     ctx.fillText(`Weapon: Lv${weaponLevel}`, 20, 60);
+
+    // Hearts
+    ctx.fillStyle = '#ef4444';
+    ctx.fillText(`HP: ${'❤'.repeat(Math.max(0, player.hp))}${'♡'.repeat(Math.max(0, player.maxHp - player.hp))}`, 20, 80);
+
+    // XP bar
+    const barW = 120;
+    const xpRatio = Math.min(1, xp / xpToNext);
+    ctx.fillStyle = '#333';
+    ctx.fillRect(20, 90, barW, 8);
+    ctx.fillStyle = '#a78bfa';
+    ctx.fillRect(20, 90, barW * xpRatio, 8);
+    ctx.strokeStyle = '#fff4';
+    ctx.strokeRect(20, 90, barW, 8);
+
+    if (levelUpFlash > 0) {
+      ctx.fillStyle = `rgba(167, 139, 250, ${Math.min(1, levelUpFlash)})`;
+      ctx.font = 'bold 28px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`LEVEL UP!`, W / 2, H / 2 - 40);
+    }
+
     ctx.fillStyle = '#a78bfa';
     ctx.textAlign = 'right';
     ctx.fillText(`Time: ${(engine.time / 1000).toFixed(0)}s`, W - 20, 20);

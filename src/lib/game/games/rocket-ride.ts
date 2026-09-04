@@ -8,8 +8,8 @@ export function createRocketRide(engine: GameEngine) {
   const H = engine.height;
 
   const player = { x: W / 2, y: H - 100, vy: 0, vx: 0, tilt: 0 };
-  const moveSpeed = 0.55; // snappy steering
-  const BASE_ASCENT = 2.6; // auto climb to the moon
+  const moveSpeed = 0.55;
+  const BASE_ASCENT = 2.6;
   const TILT_MAX = 0.25;
 
   interface Obstacle {
@@ -19,6 +19,7 @@ export function createRocketRide(engine: GameEngine) {
     h: number;
     type: 'fud' | 'bear' | 'cloud';
     speed: number;
+    nearMissed: boolean;
   }
 
   interface Collectible {
@@ -31,13 +32,15 @@ export function createRocketRide(engine: GameEngine) {
   const obstacles: Obstacle[] = [];
   const collectibles: Collectible[] = [];
   let distance = 0;
+  let lastDistanceScoreAt = 0; // once-per-threshold crossing
   let scrollSpeed = 2;
   let spawnTimer = 0;
   let collectibleTimer = 0;
   const stars: { x: number; y: number; size: number; speed: number }[] = [];
-  let trail: { x: number; y: number; life: number }[] = [];
+  let trail: { x: number; y: number; life: number; wobble: number }[] = [];
+  let nearMissFlash = 0;
+  let flamePhase = 0; // deterministic flame animation
 
-  // Init stars
   for (let i = 0; i < 80; i++) {
     stars.push({
       x: engine.rng.range(0, W),
@@ -63,6 +66,7 @@ export function createRocketRide(engine: GameEngine) {
       h: s.h,
       type,
       speed: scrollSpeed,
+      nearMissed: false,
     });
   }
 
@@ -79,74 +83,76 @@ export function createRocketRide(engine: GameEngine) {
   engine.onUpdate((dt) => {
     const sDt = dt / 1000;
     const inp = engine.input;
-    if (inp.keys.has('p') || inp.keys.has('P')) { engine.pause(); return; }
-    if (inp.keys.has('r') || inp.keys.has('R')) { engine.stop(); engine.start(); return; }
+    if (engine.justPressedAny('p', 'P')) { engine.pause(); return; }
+    if (engine.justPressedAny('r', 'R')) { engine.stop(); engine.start(); return; }
 
-    // Controls: LEFT/RIGHT steer (primary). Up/down removed — auto-climb + gentle bob.
+    nearMissFlash = Math.max(0, nearMissFlash - sDt);
+    flamePhase += sDt * 12;
+
     let targetVx = 0;
     if (inp.keys.has('ArrowLeft') || inp.keys.has('a')) targetVx -= moveSpeed;
     if (inp.keys.has('ArrowRight') || inp.keys.has('d')) targetVx += moveSpeed;
-    // Snappy response (higher factor = less laggy)
     player.vx += (targetVx - player.vx) * 0.28;
 
-    // Vertical: constant ascent with a light bob so the rocket feels alive
     player.y -= BASE_ASCENT * sDt * 60;
     player.y += Math.sin(engine.time / 420) * 0.55 * sDt * 60;
     player.vy = -BASE_ASCENT;
 
-    // Apply horizontal motion
     player.x += player.vx;
 
-    // Bounds
     player.x = Math.max(20, Math.min(W - 20, player.x));
     player.y = Math.max(50, Math.min(H - 30, player.y));
 
-    // Tilt follows horizontal velocity (snappier)
     player.tilt += (Math.max(-TILT_MAX, Math.min(TILT_MAX, player.vx * 0.55)) - player.tilt) * 0.25;
 
-    // Distance / score
+    // Distance / score — once per 10m threshold crossing (no multi-fire on scroll jumps)
     distance += scrollSpeed;
-    if (Math.floor(distance) % 10 === 0) engine.addScore(1);
+    while (lastDistanceScoreAt + 10 <= distance) {
+      lastDistanceScoreAt += 10;
+      engine.addScore(1);
+    }
 
-    // Speed up
     scrollSpeed = 2 + engine.time / 20000;
 
-    // Trail
-    trail.push({ x: player.x, y: player.y + 20, life: 1 });
+    // Deterministic trail (wobble baked at spawn, no rng in render)
+    trail.push({
+      x: player.x,
+      y: player.y + 20,
+      life: 1,
+      wobble: Math.sin(engine.time * 0.02 + trail.length) * 3,
+    });
     if (trail.length > 30) trail.shift();
     for (const t of trail) t.life -= sDt * 3;
     trail = trail.filter((t) => t.life > 0);
 
-    // Stars
     for (const s of stars) {
       s.y += s.speed * scrollSpeed;
       if (s.y > H) { s.y = 0; s.x = engine.rng.range(0, W); }
     }
 
-    // Spawn obstacles
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
       spawnTimer = Math.max(400, 1500 - engine.time / 50);
       spawnObstacle();
     }
 
-    // Spawn collectibles
     collectibleTimer -= dt;
     if (collectibleTimer <= 0) {
       collectibleTimer = Math.max(600, 2000 - engine.time / 30);
       spawnCollectible();
     }
 
-    // Update obstacles
     for (let i = obstacles.length - 1; i >= 0; i--) {
       const o = obstacles[i];
       o.y += o.speed;
       if (o.y > H + 50) { obstacles.splice(i, 1); continue; }
 
-      // Collision
       const px = player.x;
       const py = player.y;
-      if (Math.abs(px - o.x) < (o.w / 2 + 12) && Math.abs(py - o.y) < (o.h / 2 + 15)) {
+      const hitX = Math.abs(px - o.x) < (o.w / 2 + 12);
+      const hitY = Math.abs(py - o.y) < (o.h / 2 + 15);
+
+      if (hitX && hitY) {
         engine.sound.play('die');
         engine.spawnParticle(player.x, player.y, '#ef4444', 20);
         engine.shake(8, 250);
@@ -154,9 +160,20 @@ export function createRocketRide(engine: GameEngine) {
         engine.gameOver();
         return;
       }
+
+      // Near-miss: close laterally, overlapping vertically band, not already counted
+      const nearX = Math.abs(px - o.x) < (o.w / 2 + 28) && Math.abs(px - o.x) > (o.w / 2 + 12);
+      const nearY = Math.abs(py - o.y) < (o.h / 2 + 10);
+      if (!o.nearMissed && nearX && nearY) {
+        o.nearMissed = true;
+        engine.addScore(5);
+        nearMissFlash = 0.45;
+        engine.sound.play('shoot'); // whoosh-ish short beep
+        engine.addTrauma(0.06);
+        engine.logMove('near_miss', o.x, o.y);
+      }
     }
 
-    // Update collectibles
     for (let i = collectibles.length - 1; i >= 0; i--) {
       const c = collectibles[i];
       c.y += scrollSpeed;
@@ -173,7 +190,6 @@ export function createRocketRide(engine: GameEngine) {
           engine.sound.play('powerup');
           engine.spawnParticle(c.x, c.y, '#a78bfa', 15);
           engine.shake(2, 80);
-          // Brief speed reduction (easier)
           scrollSpeed *= 0.7;
         }
         collectibles.splice(i, 1);
@@ -184,14 +200,12 @@ export function createRocketRide(engine: GameEngine) {
   engine.onRender(() => {
     const ctx = engine.ctx;
 
-    // Background gradient
     const grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#0a0a1a');
     grad.addColorStop(1, '#1a0a2e');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // Stars
     ctx.fillStyle = '#ffffff';
     for (const s of stars) {
       ctx.globalAlpha = s.size / 3;
@@ -201,22 +215,20 @@ export function createRocketRide(engine: GameEngine) {
     }
     ctx.globalAlpha = 1;
 
-    // Trail
+    // Deterministic trail (no rng)
     for (const t of trail) {
       ctx.globalAlpha = t.life * 0.6;
       ctx.fillStyle = '#f97316';
       ctx.beginPath();
-      ctx.arc(t.x + engine.rng.range(-3, 3), t.y, 4 * t.life, 0, Math.PI * 2);
+      ctx.arc(t.x + t.wobble, t.y, 4 * t.life, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.globalAlpha = 1;
 
-    // Obstacles
     for (const o of obstacles) {
       ctx.save();
       ctx.translate(o.x, o.y);
       if (o.type === 'fud') {
-        // FUD cloud
         ctx.fillStyle = '#6b21a8';
         ctx.beginPath();
         ctx.ellipse(0, 0, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
@@ -227,10 +239,8 @@ export function createRocketRide(engine: GameEngine) {
         ctx.textBaseline = 'middle';
         ctx.fillText('FUD', 0, 0);
       } else if (o.type === 'bear') {
-        // Bear candle (red)
         ctx.fillStyle = '#ef4444';
         ctx.fillRect(-o.w / 2, -o.h / 2, o.w, o.h);
-        // Wick
         ctx.fillRect(-2, -o.h / 2 - 15, 4, 15);
         ctx.fillStyle = '#fff';
         ctx.font = '12px monospace';
@@ -238,7 +248,6 @@ export function createRocketRide(engine: GameEngine) {
         ctx.textBaseline = 'middle';
         ctx.fillText('🐻', 0, 0);
       } else {
-        // Cloud
         ctx.fillStyle = '#374151';
         ctx.beginPath();
         ctx.ellipse(0, 0, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
@@ -254,20 +263,16 @@ export function createRocketRide(engine: GameEngine) {
       ctx.restore();
     }
 
-    // Collectibles
     for (const c of collectibles) {
       ctx.save();
       ctx.translate(c.x, c.y);
       if (c.type === 'green') {
-        // Green candle
         ctx.fillStyle = '#22c55e';
         ctx.fillRect(-6, -15, 12, 30);
         ctx.fillRect(-2, -22, 4, 7);
-        // Glow
         ctx.shadowColor = '#22c55e';
         ctx.shadowBlur = 10;
       } else {
-        // Boost diamond
         ctx.fillStyle = '#a78bfa';
         ctx.beginPath();
         ctx.moveTo(0, -12);
@@ -282,12 +287,10 @@ export function createRocketRide(engine: GameEngine) {
       ctx.restore();
     }
 
-    // Player (cat on rocket)
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.rotate(player.tilt);
 
-    // Rocket body
     ctx.fillStyle = '#6b7280';
     ctx.beginPath();
     ctx.moveTo(0, -20);
@@ -298,8 +301,8 @@ export function createRocketRide(engine: GameEngine) {
     ctx.closePath();
     ctx.fill();
 
-    // Rocket flames
-    const flameH = 8 + Math.random() * 10;
+    // Deterministic flame
+    const flameH = 8 + (Math.sin(flamePhase) * 0.5 + 0.5) * 10;
     ctx.fillStyle = '#f97316';
     ctx.beginPath();
     ctx.moveTo(-6, 18);
@@ -315,13 +318,11 @@ export function createRocketRide(engine: GameEngine) {
     ctx.closePath();
     ctx.fill();
 
-    // Cat on rocket
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
     ctx.arc(0, -5, 10, 0, Math.PI * 2);
     ctx.fill();
 
-    // Ears
     ctx.beginPath();
     ctx.moveTo(-6, -13);
     ctx.lineTo(-10, -22);
@@ -333,7 +334,6 @@ export function createRocketRide(engine: GameEngine) {
     ctx.lineTo(1, -16);
     ctx.fill();
 
-    // Eyes
     ctx.fillStyle = '#000';
     ctx.beginPath();
     ctx.arc(-3, -7, 2, 0, Math.PI * 2);
@@ -342,7 +342,13 @@ export function createRocketRide(engine: GameEngine) {
 
     ctx.restore();
 
-    // HUD
+    if (nearMissFlash > 0) {
+      ctx.fillStyle = `rgba(34, 211, 238, ${nearMissFlash * 0.9})`;
+      ctx.font = 'bold 18px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('NEAR MISS! +5', W / 2, player.y - 40);
+    }
+
     ctx.fillStyle = '#22c55e';
     ctx.font = 'bold 16px monospace';
     ctx.textAlign = 'left';

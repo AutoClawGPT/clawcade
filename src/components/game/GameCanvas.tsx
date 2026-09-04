@@ -69,21 +69,30 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
   const handleStart = () => {
     const eng = engineRef.current;
     if (!eng) return;
+    // Resume AudioContext on user gesture (browsers mute until then)
+    eng.sound.resume();
     if (state === 'playing' || state === 'paused') {
       // Restart cleanly: stop (detach listeners) then rebuild to avoid duplicates
       eng.stop();
       initEngine();
-      setTimeout(() => engineRef.current?.start(), 50);
+      setTimeout(() => {
+        engineRef.current?.sound.resume();
+        engineRef.current?.start();
+      }, 50);
     } else {
       eng.start();
     }
   };
 
   const handleRestart = () => {
+    engineRef.current?.sound.resume();
     engineRef.current?.stop();
     initEngine();
     // Small delay so the new engine is ready before starting
-    setTimeout(() => engineRef.current?.start(), 50);
+    setTimeout(() => {
+      engineRef.current?.sound.resume();
+      engineRef.current?.start();
+    }, 50);
   };
 
   const handlePause = () => {
@@ -105,22 +114,20 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
     });
   };
 
-  // Mobile touch controls: map on-screen buttons to the engine's key set.
-  // Ref is only accessed on pointer events (not during render), satisfying the
-  // react-hooks/refs rule.
-  const pressKeys = (down: boolean) => (e: React.PointerEvent, keys: string[]) => {
-    e.preventDefault();
-    const inp = engineRef.current?.input;
-    if (!inp) return;
-    if (down) keys.forEach((k) => inp.keys.add(k));
-    else keys.forEach((k) => inp.keys.delete(k));
-  };
+  // Mobile touch controls: map on-screen buttons to engine key edges + held state.
   const keyDown = (keys: string[]) => (e: React.PointerEvent) => {
-    // Capture the pointer so release+cancel are reliable (no accidental drop on wobble)
+    e.preventDefault();
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    pressKeys(true)(e, keys);
+    const eng = engineRef.current;
+    if (!eng) return;
+    keys.forEach((k) => eng.simulateKeyDown(k));
   };
-  const keyUp = (keys: string[]) => (e: React.PointerEvent) => pressKeys(false)(e, keys);
+  const keyUp = (keys: string[]) => (e: React.PointerEvent) => {
+    e.preventDefault();
+    const eng = engineRef.current;
+    if (!eng) return;
+    keys.forEach((k) => eng.simulateKeyUp(k));
+  };
 
   useEffect(() => {
     initEngine();
@@ -142,14 +149,14 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
 
         {/* Overlay states */}
         {state === 'idle' && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70">
             <button
               onClick={handleStart}
               className="px-8 py-4 bg-purple-600 hover:bg-purple-500 rounded-lg text-xl font-bold text-white transition-colors active:scale-95 cursor-pointer"
             >
               ▶ START GAME
             </button>
-            <p className="text-xs text-gray-400 mt-3 max-w-sm text-center">
+            <p className="text-xs text-gray-400 mt-3 max-w-sm text-center px-4">
               {onScoreSubmit ? "Sign in and play to submit your score. Rewards and leaderboard need a ClawCade account." : "Play — arrow keys / WASD to move. Score auto-verifies."}
             </p>
           </div>
