@@ -1,5 +1,5 @@
-// Rocket Ride — Endless runner
-// Cat on rocket going UP the screen: world scrolls DOWN; player stays in lower band and steers L/R.
+// Rocket Ride — Endless runner (fix-in-place improve; keep ALL controls useful)
+// World scrolls down; ship stays in playable band. Full pad: L/R steer, U/D lane, A boost, B brake.
 
 import { GameEngine } from '../engine';
 
@@ -7,11 +7,20 @@ export function createRocketRide(engine: GameEngine) {
   const W = engine.width;
   const H = engine.height;
 
-  // Keep rocket in a playable band (classic runner feel — NOT flying into the ceiling)
-  const PLAYER_Y = H * 0.72;
-  const player = { x: W / 2, y: PLAYER_Y, vx: 0, tilt: 0, radius: 14 };
-  const moveSpeed = 0.62;
-  const TILT_MAX = 0.32;
+  const BAND_MIN = H * 0.58;
+  const BAND_MAX = H * 0.82;
+  const PLAYER_Y0 = H * 0.72;
+  const player = {
+    x: W / 2,
+    y: PLAYER_Y0,
+    vx: 0,
+    vy: 0,
+    tilt: 0,
+    radius: 14,
+    squash: 1,
+  };
+  const moveSpeed = 0.68;
+  const TILT_MAX = 0.38;
 
   interface Obstacle {
     x: number;
@@ -20,6 +29,7 @@ export function createRocketRide(engine: GameEngine) {
     h: number;
     type: 'fud' | 'bear' | 'cloud';
     nearMissed: boolean;
+    pulse: number;
   }
 
   interface Collectible {
@@ -38,19 +48,31 @@ export function createRocketRide(engine: GameEngine) {
   let spawnTimer = 0;
   let collectibleTimer = 0;
   let nearMissFlash = 0;
+  let nearMissStreak = 0;
   let boostTimer = 0;
+  let brakeTimer = 0;
   let flamePhase = 0;
-  let hitFlash = 0;
+  let hitStop = 0;
+  let lanePulse = 0;
 
-  const stars: { x: number; y: number; size: number; speed: number }[] = [];
+  const starsFar: { x: number; y: number; size: number; speed: number }[] = [];
+  const starsNear: { x: number; y: number; size: number; speed: number }[] = [];
   let trail: { x: number; y: number; life: number; wobble: number }[] = [];
 
-  for (let i = 0; i < 90; i++) {
-    stars.push({
+  for (let i = 0; i < 55; i++) {
+    starsFar.push({
       x: engine.rng.range(0, W),
       y: engine.rng.range(0, H),
-      size: engine.rng.range(1, 2.8),
-      speed: engine.rng.range(0.35, 1.8),
+      size: engine.rng.range(0.8, 1.8),
+      speed: engine.rng.range(0.2, 0.7),
+    });
+  }
+  for (let i = 0; i < 40; i++) {
+    starsNear.push({
+      x: engine.rng.range(0, W),
+      y: engine.rng.range(0, H),
+      size: engine.rng.range(1.4, 3.0),
+      speed: engine.rng.range(0.9, 2.2),
     });
   }
 
@@ -63,10 +85,9 @@ export function createRocketRide(engine: GameEngine) {
       cloud: { w: 88, h: 38 },
     };
     const s = sizes[type];
-    // Avoid spawning directly on player lane too often
     let x = engine.rng.range(s.w / 2 + 8, W - s.w / 2 - 8);
-    if (engine.rng.next() < 0.35) {
-      x = player.x + engine.rng.range(-120, 120);
+    if (engine.rng.next() < 0.38) {
+      x = player.x + engine.rng.range(-130, 130);
       x = Math.max(s.w / 2 + 8, Math.min(W - s.w / 2 - 8, x));
     }
     obstacles.push({
@@ -76,6 +97,7 @@ export function createRocketRide(engine: GameEngine) {
       h: s.h,
       type,
       nearMissed: false,
+      pulse: engine.rng.range(0, Math.PI * 2),
     });
   }
 
@@ -91,6 +113,10 @@ export function createRocketRide(engine: GameEngine) {
   }
 
   engine.onUpdate((dt) => {
+    if (hitStop > 0) {
+      hitStop -= dt;
+      return;
+    }
     const sDt = dt / 1000;
     const inp = engine.input;
     if (engine.justPressedAny('p', 'P')) {
@@ -104,52 +130,100 @@ export function createRocketRide(engine: GameEngine) {
     }
 
     nearMissFlash = Math.max(0, nearMissFlash - sDt);
-    hitFlash = Math.max(0, hitFlash - sDt);
     boostTimer = Math.max(0, boostTimer - sDt);
-    flamePhase += sDt * 14;
+    brakeTimer = Math.max(0, brakeTimer - sDt);
+    lanePulse = Math.max(0, lanePulse - sDt);
+    flamePhase += sDt * (boostTimer > 0 ? 20 : 14);
+    player.squash += (1 - player.squash) * Math.min(1, sDt * 10);
 
-    // Steer — keyboard + held, and optional pointer pull
+    // A / Space / Z = boost burst (edge or hold refreshes)
+    if (engine.justPressedAny('z', ' ', 'Z')) {
+      boostTimer = Math.max(boostTimer, 1.6);
+      brakeTimer = 0;
+      player.squash = 0.78;
+      engine.sound.play('powerup');
+      engine.feedback('medium', player.x, player.y, '#a78bfa');
+      engine.logMove('boost', player.x, player.y);
+    }
+    // B / X / Enter = brake for precision dodge
+    if (engine.justPressedAny('x', 'X', 'Enter')) {
+      brakeTimer = Math.max(brakeTimer, 1.1);
+      boostTimer = Math.min(boostTimer, 0.15);
+      player.squash = 1.18;
+      engine.sound.play('shoot');
+      engine.addTrauma(0.04);
+      engine.logMove('brake', player.x, player.y);
+    }
+
+    // Steer L/R
     let targetVx = 0;
     if (inp.keys.has('ArrowLeft') || inp.keys.has('a') || inp.keys.has('A')) targetVx -= moveSpeed;
     if (inp.keys.has('ArrowRight') || inp.keys.has('d') || inp.keys.has('D')) targetVx += moveSpeed;
 
-    // Touch/mouse: drag toward pointer X while playing (helps mobile beyond D-pad)
-    if (inp.mouse.down || inp.touches.length > 0) {
-      const px = inp.touches.length > 0 ? inp.touches[0].x : inp.mouse.x;
-      const dx = px - player.x;
-      if (Math.abs(dx) > 8) targetVx += Math.max(-moveSpeed, Math.min(moveSpeed, dx * 0.012));
+    // U/D nudge within band (lane bob)
+    let targetVy = 0;
+    if (inp.keys.has('ArrowUp') || inp.keys.has('w') || inp.keys.has('W')) {
+      targetVy -= 0.42;
+      lanePulse = 0.25;
+    }
+    if (inp.keys.has('ArrowDown') || inp.keys.has('s') || inp.keys.has('S')) {
+      targetVy += 0.42;
+      lanePulse = 0.25;
     }
 
-    const speedMul = boostTimer > 0 ? 1.25 : 1;
-    player.vx += (targetVx * speedMul - player.vx) * 0.32;
-    player.x += player.vx * sDt * 60;
-    player.x = Math.max(player.radius + 4, Math.min(W - player.radius - 4, player.x));
-    // Soft bob only — stay in band
-    player.y = PLAYER_Y + Math.sin(engine.time / 380) * 6;
-    player.tilt += (Math.max(-TILT_MAX, Math.min(TILT_MAX, player.vx * 0.5)) - player.tilt) * 0.28;
+    // Drag / touch aim
+    if (inp.mouse.down || inp.touches.length > 0) {
+      const px = inp.touches.length > 0 ? inp.touches[0].x : inp.mouse.x;
+      const py = inp.touches.length > 0 ? inp.touches[0].y : inp.mouse.y;
+      const dx = px - player.x;
+      const dy = py - player.y;
+      if (Math.abs(dx) > 8) targetVx += Math.max(-moveSpeed, Math.min(moveSpeed, dx * 0.012));
+      if (Math.abs(dy) > 12) targetVy += Math.max(-0.42, Math.min(0.42, dy * 0.008));
+    }
 
-    // World scroll (dt-based). Distance in "meters".
+    const speedMul = boostTimer > 0 ? 1.28 : brakeTimer > 0 ? 0.72 : 1;
+    player.vx += (targetVx * speedMul - player.vx) * 0.34;
+    player.vy += (targetVy - player.vy) * 0.28;
+    player.x += player.vx * sDt * 60;
+    player.y += player.vy * sDt * 60;
+    // Soft settle toward band center when idle
+    if (Math.abs(targetVy) < 0.01) {
+      player.y += (PLAYER_Y0 + Math.sin(engine.time / 380) * 5 - player.y) * 0.04;
+    }
+    player.x = Math.max(player.radius + 4, Math.min(W - player.radius - 4, player.x));
+    player.y = Math.max(BAND_MIN, Math.min(BAND_MAX, player.y));
+    player.tilt += (Math.max(-TILT_MAX, Math.min(TILT_MAX, player.vx * 0.55)) - player.tilt) * 0.3;
+
+    // World scroll
+    let scrollMul = 1 + Math.min(1.8, engine.time / 22000);
+    if (boostTimer > 0) scrollMul += 0.35;
+    if (brakeTimer > 0) scrollMul *= 0.55;
+    scrollSpeed = 2.4 * scrollMul;
     const scroll = scrollSpeed * sDt * 60;
     distance += scroll;
     while (lastDistanceScoreAt + 10 <= distance) {
       lastDistanceScoreAt += 10;
       engine.addScore(1);
     }
-    // Difficulty ramp
-    scrollSpeed = 2.4 + Math.min(4.5, engine.time / 18000) + (boostTimer > 0 ? 0.6 : 0);
 
-    // Trail
     trail.push({
       x: player.x,
       y: player.y + 18,
       life: 1,
       wobble: Math.sin(engine.time * 0.025 + trail.length * 0.7) * 2.5,
     });
-    if (trail.length > 36) trail.shift();
+    if (trail.length > 42) trail.shift();
     for (const t of trail) t.life -= sDt * 2.8;
     trail = trail.filter((t) => t.life > 0);
 
-    for (const s of stars) {
+    for (const s of starsFar) {
+      s.y += s.speed * scroll * 0.45;
+      if (s.y > H) {
+        s.y = -2;
+        s.x = engine.rng.range(0, W);
+      }
+    }
+    for (const s of starsNear) {
       s.y += s.speed * scroll;
       if (s.y > H) {
         s.y = -2;
@@ -159,20 +233,21 @@ export function createRocketRide(engine: GameEngine) {
 
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
-      spawnTimer = Math.max(380, 1350 - engine.time / 55);
+      spawnTimer = Math.max(360, 1300 - engine.time / 55);
       spawnObstacle();
-      if (engine.time > 25000 && engine.rng.next() < 0.28) spawnObstacle();
+      if (engine.time > 22000 && engine.rng.next() < 0.3) spawnObstacle();
     }
 
     collectibleTimer -= dt;
     if (collectibleTimer <= 0) {
-      collectibleTimer = Math.max(520, 1700 - engine.time / 40);
+      collectibleTimer = Math.max(500, 1650 - engine.time / 40);
       spawnCollectible();
     }
 
     for (let i = obstacles.length - 1; i >= 0; i--) {
       const o = obstacles[i];
       o.y += scroll;
+      o.pulse += sDt * 3;
       if (o.y > H + 60) {
         obstacles.splice(i, 1);
         continue;
@@ -183,25 +258,27 @@ export function createRocketRide(engine: GameEngine) {
       const hitY = Math.abs(player.y - o.y) < o.h / 2 + player.radius - hitPad;
 
       if (hitX && hitY) {
+        hitStop = 90;
         engine.sound.play('die');
-        engine.spawnParticle(player.x, player.y, '#ef4444', 24);
-        engine.feedback('heavy');
+        engine.spawnParticle(player.x, player.y, '#ef4444', 28);
+        engine.feedback('heavy', player.x, player.y, '#ef4444');
         engine.gameOver();
         return;
       }
 
-      // Near-miss corridor
       const nearX =
         Math.abs(player.x - o.x) < o.w / 2 + player.radius + 18 &&
         Math.abs(player.x - o.x) > o.w / 2 + player.radius - hitPad;
-      const nearY = Math.abs(player.y - o.y) < o.h / 2 + 8;
-      if (!o.nearMissed && nearX && nearY && o.y > player.y - 40) {
+      const nearY = Math.abs(player.y - o.y) < o.h / 2 + 10;
+      if (!o.nearMissed && nearX && nearY && o.y > player.y - 48) {
         o.nearMissed = true;
-        engine.addScore(5);
+        nearMissStreak += 1;
+        const bonus = 5 + Math.min(15, nearMissStreak * 2);
+        engine.addScore(bonus);
         nearMissFlash = 0.55;
         engine.sound.play('shoot');
-        engine.addTrauma(0.08);
-        engine.spawnParticle(player.x, player.y - 10, '#22d3ee', 6);
+        engine.addTrauma(0.07 + Math.min(0.08, nearMissStreak * 0.01));
+        engine.spawnParticle(player.x, player.y - 10, '#22d3ee', 6 + Math.min(8, nearMissStreak));
         engine.logMove('near_miss', o.x, o.y);
       }
     }
@@ -216,17 +293,19 @@ export function createRocketRide(engine: GameEngine) {
       }
       if (!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < 26) {
         c.collected = true;
+        nearMissStreak = Math.max(0, nearMissStreak - 1);
         if (c.type === 'green') {
           engine.addScore(25);
           engine.sound.play('collect');
-          engine.spawnParticle(c.x, c.y, '#22c55e', 10);
-          engine.feedback('light');
+          engine.spawnParticle(c.x, c.y, '#22c55e', 12);
+          engine.feedback('light', c.x, c.y, '#22c55e');
         } else {
           engine.addScore(80);
           engine.sound.play('powerup');
-          engine.spawnParticle(c.x, c.y, '#a78bfa', 16);
-          engine.feedback('medium');
-          boostTimer = 2.2;
+          engine.spawnParticle(c.x, c.y, '#a78bfa', 18);
+          engine.feedback('medium', c.x, c.y, '#a78bfa');
+          boostTimer = Math.max(boostTimer, 2.2);
+          player.squash = 0.75;
         }
         collectibles.splice(i, 1);
       }
@@ -236,17 +315,23 @@ export function createRocketRide(engine: GameEngine) {
   engine.onRender(() => {
     const ctx = engine.ctx;
 
-    // Space gradient + subtle nebula bands
     const grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#050514');
-    grad.addColorStop(0.45, '#12082a');
-    grad.addColorStop(1, '#1a0a2e');
+    grad.addColorStop(0.4, '#12082a');
+    grad.addColorStop(0.75, '#1a0a2e');
+    grad.addColorStop(1, '#2a1040');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
 
-    // Stars
-    for (const s of stars) {
-      ctx.globalAlpha = 0.35 + (s.size / 3) * 0.65;
+    // Far stars
+    for (const s of starsFar) {
+      ctx.globalAlpha = 0.25 + (s.size / 3) * 0.4;
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(s.x, s.y, s.size, s.size);
+    }
+    // Near stars
+    for (const s of starsNear) {
+      ctx.globalAlpha = 0.4 + (s.size / 3) * 0.55;
       ctx.fillStyle = '#e2e8f0';
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
@@ -254,11 +339,16 @@ export function createRocketRide(engine: GameEngine) {
     }
     ctx.globalAlpha = 1;
 
-    // Exhaust trail
+    // Soft lane band hint
+    if (lanePulse > 0 || engine.time < 4000) {
+      ctx.fillStyle = `rgba(56, 189, 248, ${0.04 + lanePulse * 0.08})`;
+      ctx.fillRect(0, BAND_MIN, W, BAND_MAX - BAND_MIN);
+    }
+
     for (const t of trail) {
       ctx.globalAlpha = t.life * 0.55;
-      const g = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, 7 * t.life);
-      g.addColorStop(0, '#fdba74');
+      const g = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, 8 * t.life);
+      g.addColorStop(0, boostTimer > 0 ? '#c4b5fd' : '#fdba74');
       g.addColorStop(1, 'rgba(249,115,22,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -267,25 +357,26 @@ export function createRocketRide(engine: GameEngine) {
     }
     ctx.globalAlpha = 1;
 
-    // Obstacles — drawn shapes (no emoji)
     for (const o of obstacles) {
       ctx.save();
       ctx.translate(o.x, o.y);
+      const wob = Math.sin(o.pulse) * 1.5;
       if (o.type === 'fud') {
-        const fog = ctx.createRadialGradient(0, 0, 4, 0, 0, o.w / 2);
+        const fog = ctx.createRadialGradient(0, wob, 4, 0, wob, o.w / 2);
         fog.addColorStop(0, 'rgba(168,85,247,0.95)');
-        fog.addColorStop(1, 'rgba(88,28,135,0.15)');
+        fog.addColorStop(1, 'rgba(88,28,135,0.12)');
         ctx.fillStyle = fog;
         ctx.beginPath();
-        ctx.ellipse(0, 0, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, wob, o.w / 2, o.h / 2, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#fecaca';
         ctx.font = 'bold 13px monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('FUD', 0, 1);
+        ctx.fillText('FUD', 0, wob + 1);
       } else if (o.type === 'bear') {
-        // Red bearish candle body + wick
+        ctx.fillStyle = '#7f1d1d';
+        ctx.fillRect(-o.w / 2 - 2, -o.h / 2 + 10, o.w + 4, o.h - 6);
         ctx.fillStyle = '#dc2626';
         ctx.fillRect(-o.w / 2, -o.h / 2 + 8, o.w, o.h - 8);
         ctx.fillStyle = '#f87171';
@@ -297,33 +388,32 @@ export function createRocketRide(engine: GameEngine) {
         ctx.textBaseline = 'middle';
         ctx.fillText('BEAR', 0, 4);
       } else {
-        ctx.fillStyle = '#4b5563';
+        ctx.fillStyle = '#374151';
         ctx.beginPath();
-        ctx.ellipse(0, 4, o.w / 2, o.h / 2.2, 0, 0, Math.PI * 2);
+        ctx.ellipse(0, 4 + wob, o.w / 2, o.h / 2.2, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.fillStyle = '#6b7280';
         ctx.beginPath();
-        ctx.ellipse(-18, -6, o.w / 3.2, o.h / 2.8, 0, 0, Math.PI * 2);
+        ctx.ellipse(-18, -6 + wob, o.w / 3.2, o.h / 2.8, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.beginPath();
-        ctx.ellipse(18, -4, o.w / 3.4, o.h / 2.6, 0, 0, Math.PI * 2);
+        ctx.ellipse(18, -4 + wob, o.w / 3.4, o.h / 2.6, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = '#9ca3af';
+        ctx.fillStyle = '#d1d5db';
         ctx.font = 'bold 11px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('SMOKE', 0, 6);
+        ctx.fillText('SMOKE', 0, 6 + wob);
       }
       ctx.restore();
     }
 
-    // Collectibles
     for (const c of collectibles) {
       ctx.save();
       ctx.translate(c.x, c.y);
       ctx.rotate(Math.sin(c.spin) * 0.15);
       if (c.type === 'green') {
         ctx.shadowColor = '#22c55e';
-        ctx.shadowBlur = 12;
+        ctx.shadowBlur = 14;
         ctx.fillStyle = '#16a34a';
         ctx.fillRect(-7, -16, 14, 32);
         ctx.fillStyle = '#4ade80';
@@ -332,7 +422,7 @@ export function createRocketRide(engine: GameEngine) {
         ctx.fillRect(-2, -22, 4, 8);
       } else {
         ctx.shadowColor = '#a78bfa';
-        ctx.shadowBlur = 16;
+        ctx.shadowBlur = 18;
         ctx.fillStyle = '#8b5cf6';
         ctx.beginPath();
         ctx.moveTo(0, -14);
@@ -351,17 +441,16 @@ export function createRocketRide(engine: GameEngine) {
       ctx.restore();
     }
 
-    // Rocket + cat
+    // Rocket
     ctx.save();
     ctx.translate(player.x, player.y);
     ctx.rotate(player.tilt);
-    if (hitFlash > 0) ctx.globalAlpha = 0.55 + 0.45 * Math.sin(hitFlash * 40);
+    ctx.scale(2 - player.squash, player.squash);
 
-    // Body
     const body = ctx.createLinearGradient(0, -22, 0, 20);
-    body.addColorStop(0, '#e5e7eb');
-    body.addColorStop(0.5, '#9ca3af');
-    body.addColorStop(1, '#4b5563');
+    body.addColorStop(0, '#f8fafc');
+    body.addColorStop(0.45, '#cbd5e1');
+    body.addColorStop(1, '#64748b');
     ctx.fillStyle = body;
     ctx.beginPath();
     ctx.moveTo(0, -24);
@@ -372,7 +461,6 @@ export function createRocketRide(engine: GameEngine) {
     ctx.closePath();
     ctx.fill();
 
-    // Window
     ctx.fillStyle = '#38bdf8';
     ctx.beginPath();
     ctx.arc(0, -6, 6, 0, Math.PI * 2);
@@ -381,7 +469,6 @@ export function createRocketRide(engine: GameEngine) {
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Fins
     ctx.fillStyle = '#ef4444';
     ctx.beginPath();
     ctx.moveTo(-9, 8);
@@ -394,24 +481,22 @@ export function createRocketRide(engine: GameEngine) {
     ctx.lineTo(8, 18);
     ctx.fill();
 
-    // Flame (deterministic)
-    const flameH = 10 + (Math.sin(flamePhase) * 0.5 + 0.5) * 14 + (boostTimer > 0 ? 8 : 0);
-    ctx.fillStyle = '#f97316';
+    const flameH = 10 + (Math.sin(flamePhase) * 0.5 + 0.5) * 14 + (boostTimer > 0 ? 10 : 0) - (brakeTimer > 0 ? 6 : 0);
+    ctx.fillStyle = boostTimer > 0 ? '#a78bfa' : '#f97316';
     ctx.beginPath();
     ctx.moveTo(-7, 20);
-    ctx.lineTo(0, 20 + flameH);
+    ctx.lineTo(0, 20 + Math.max(4, flameH));
     ctx.lineTo(7, 20);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = '#fde047';
     ctx.beginPath();
     ctx.moveTo(-3.5, 20);
-    ctx.lineTo(0, 20 + flameH * 0.55);
+    ctx.lineTo(0, 20 + Math.max(2, flameH * 0.55));
     ctx.lineTo(3.5, 20);
     ctx.closePath();
     ctx.fill();
 
-    // Cat head on nose
     ctx.fillStyle = '#f59e0b';
     ctx.beginPath();
     ctx.arc(0, -18, 9, 0, Math.PI * 2);
@@ -433,28 +518,36 @@ export function createRocketRide(engine: GameEngine) {
     ctx.fill();
 
     ctx.restore();
-    ctx.globalAlpha = 1;
 
     if (boostTimer > 0) {
-      ctx.fillStyle = 'rgba(167,139,250,0.25)';
+      ctx.fillStyle = 'rgba(167,139,250,0.18)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#c4b5fd';
       ctx.font = 'bold 14px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('BOOST!', W / 2, 48);
+      ctx.fillText('BOOST', W / 2, 48);
+    }
+    if (brakeTimer > 0) {
+      ctx.fillStyle = 'rgba(168,85,247,0.12)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#e9d5ff';
+      ctx.font = 'bold 14px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('BRAKE', W / 2, 48);
     }
 
     if (nearMissFlash > 0) {
       ctx.fillStyle = `rgba(34, 211, 238, ${Math.min(1, nearMissFlash * 1.4)})`;
-      ctx.font = 'bold 20px monospace';
+      ctx.font = 'bold 18px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('NEAR MISS! +5', W / 2, player.y - 48);
+      const streakTxt = nearMissStreak > 1 ? ` x${nearMissStreak}` : '';
+      ctx.fillText(`NEAR MISS!${streakTxt}`, W / 2, player.y - 48);
     }
 
     // HUD
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(10, 8, 160, 44);
-    ctx.fillRect(W - 150, 8, 140, 44);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(10, 8, 150, 52);
+    ctx.fillRect(W - 150, 8, 140, 52);
     ctx.fillStyle = '#4ade80';
     ctx.font = 'bold 15px monospace';
     ctx.textAlign = 'left';
@@ -462,6 +555,10 @@ export function createRocketRide(engine: GameEngine) {
     ctx.fillStyle = '#94a3b8';
     ctx.font = '11px monospace';
     ctx.fillText('DISTANCE', 20, 44);
+    if (nearMissStreak > 0) {
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillText(`STREAK ${nearMissStreak}`, 20, 56);
+    }
     ctx.fillStyle = '#c4b5fd';
     ctx.font = 'bold 15px monospace';
     ctx.textAlign = 'right';
@@ -470,12 +567,11 @@ export function createRocketRide(engine: GameEngine) {
     ctx.font = '11px monospace';
     ctx.fillText('SPEED', W - 20, 44);
 
-    // Steer hint once early
-    if (engine.time < 3500) {
-      ctx.fillStyle = 'rgba(255,255,255,0.7)';
-      ctx.font = '13px monospace';
+    if (engine.time < 4500) {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = '12px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('← →  steer   ·   collect green · dodge FUD', W / 2, H - 18);
+      ctx.fillText('←→ steer  ↑↓ lane  A boost  B brake', W / 2, H - 18);
     }
   });
 }
