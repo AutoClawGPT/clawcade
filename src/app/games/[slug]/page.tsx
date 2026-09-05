@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { GAMES, getGameBySlug } from '@/lib/game';
+import { submitPlayScore } from '@/lib/game/submit-score';
 import GameCanvas from '@/components/game/GameCanvas';
 
 interface LeaderboardEntry {
@@ -53,14 +54,9 @@ export default function GamePage() {
     fingerprint: string;
   }) => {
     try {
-      const res = await fetch('/api/games/scores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
-      const result = await res.json();
-      if (result.success) {
-        alert(`Score submitted! +${result.xpEarned} XP`);
+      const result = await submitPlayScore(data);
+      if (result.ok) {
+        alert(`${result.message} (+${result.xpEarned} XP via ${result.path})`);
       } else {
         alert(`Score rejected: ${result.error}`);
       }
