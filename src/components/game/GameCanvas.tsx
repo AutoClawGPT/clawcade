@@ -244,8 +244,8 @@ export default function GameCanvas({ game, onScoreSubmit }: GameCanvasProps) {
             <div />
           </div>
           <div className="flex flex-col items-center justify-center gap-3">
-            <button type="button" aria-label="A boost" onPointerDown={keyDown(['z', ' '])} onPointerUp={keyUp(['z', ' '])} onPointerCancel={keyUp(['z', ' '])} className="w-20 h-16 rounded-xl bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88] text-base font-bold active:bg-[#00FF88]/40 touch-none">A</button>
-            <button type="button" aria-label="B brake" onPointerDown={keyDown(['x', 'Enter'])} onPointerUp={keyUp(['x', 'Enter'])} onPointerCancel={keyUp(['x', 'Enter'])} className="w-20 h-16 rounded-xl bg-[#A855F7]/20 border border-[#A855F7]/40 text-[#A855F7] text-base font-bold active:bg-[#A855F7]/40 touch-none">B</button>
+            <button type="button" aria-label="A — Boost" onPointerDown={keyDown(['z', ' '])} onPointerUp={keyUp(['z', ' '])} onPointerCancel={keyUp(['z', ' '])} className="w-20 h-16 rounded-xl bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88] text-base font-bold active:bg-[#00FF88]/40 touch-none">A BOOST</button>
+            <button type="button" aria-label="B — Brake" onPointerDown={keyDown(['x', 'Enter'])} onPointerUp={keyUp(['x', 'Enter'])} onPointerCancel={keyUp(['x', 'Enter'])} className="w-20 h-16 rounded-xl bg-[#A855F7]/20 border border-[#A855F7]/40 text-[#A855F7] text-base font-bold active:bg-[#A855F7]/40 touch-none">B BRAKE</button>
           </div>
         </div>
       )}
