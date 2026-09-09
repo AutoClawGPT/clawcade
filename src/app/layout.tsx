@@ -49,6 +49,9 @@ export const metadata: Metadata = {
   icons: {
     icon: '/favicon.ico',
   },
+  other: {
+    'virtual-protocol-site-verification': '28f8ba676022c565dc29d2b2fa08637a',
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
